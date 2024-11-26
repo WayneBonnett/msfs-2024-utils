@@ -39,7 +39,9 @@ def find_airport_in_streamed_packages_folder(root_folder, airport):
 # package folder also exists in the community folder.
 def check_airports_in_streamed_packages_folder(root_community_folder, root_streamed_packages_folder, verbose):
     missing_streamed_package_overrides = []
+    print(f"PROGRESS: Finding airports in the community folder...")
     airports = find_airports_in_community_folder(root_community_folder, verbose)
+    print(f"PROGRESS: Checking streamed package overrides in the community folder...")
     for airport in airports:
         streamed_package_folder = find_airport_in_streamed_packages_folder(root_streamed_packages_folder, airport)
         if streamed_package_folder:
@@ -66,10 +68,19 @@ def main():
     parser.add_argument('--autofix', action='store_true', help='Automatically create missing streamed package overrides to the community folder.')
     args = parser.parse_args()
     
+    if not args.community:
+        print("ERROR: No community folder specified.")
+        parser.print_help()
+        return
+    if not args.streamedpackages:
+        print("ERROR: No streamed packages folder specified.")
+        parser.print_help()
+        return
     root_community_folder = args.community
     root_streamed_packages_folder = args.streamedpackages
     
     missing_streamed_package_overrides = check_airports_in_streamed_packages_folder(root_community_folder, root_streamed_packages_folder, args.verbose)
+    print("PROGRESS: Scan complete.")
     print()
     print("SUMMARY")
     if missing_streamed_package_overrides:
