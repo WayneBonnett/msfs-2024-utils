@@ -3,7 +3,7 @@
 # the "content" field, which is going to be the airport's ICAO code.
 # Then, look for any subfolder in the root streamed packages folder that contiains that ICAO code in its name.
 # Make sure that a subfolder with the same name exists in the root community folder. Report if there is or not.
-version = '0.1.1'
+version = '0.2'
 
 import argparse
 import os
@@ -68,16 +68,37 @@ def main():
     parser.add_argument('--autofix', action='store_true', help='Automatically create missing streamed package overrides to the community folder.')
     args = parser.parse_args()
     
-    if not args.community:
-        print("ERROR: No community folder specified.")
-        parser.print_help()
-        return
-    if not args.streamedpackages:
-        print("ERROR: No streamed packages folder specified.")
-        parser.print_help()
-        return
     root_community_folder = args.community
+    if not root_community_folder:
+        # try to automatically determine the community folder by parsing 
+        # '%localappdata%\Packages\Microsoft.Limitless_8wekyb3d8bbwe\LocalCache\usercfg.opt' 
+        # and looking for the 'InstalledPackagesPath' key
+        usercfg_path = os.path.join(os.getenv('LOCALAPPDATA'), 'Packages', 'Microsoft.Limitless_8wekyb3d8bbwe', 'LocalCache', 'usercfg.opt')
+        if os.path.exists(usercfg_path):
+            with open(usercfg_path, 'r') as f:
+                for line in f:
+                    if 'InstalledPackagesPath' in line:
+                        root_installed_packages_folder = line.split(' ', 1)[1].strip().replace('"', '')
+                        root_community_folder = os.path.join(root_installed_packages_folder, 'Community')
+                        break
+                    
+    if not root_community_folder or not os.path.exists(root_community_folder):
+        print("ERROR: No community folder specified, nor could one be found automatically.")
+        print()
+        parser.print_help()
+        return
+    print(f"INFO: Using community folder {root_community_folder}")
+    
     root_streamed_packages_folder = args.streamedpackages
+    if not root_streamed_packages_folder:
+        # check if %localappdata%\Packages\Microsoft.Limitless_8wekyb3d8bbwe\LocalState\StreamedPackages exists
+        root_streamed_packages_folder = os.path.join(os.getenv('LOCALAPPDATA'), 'Packages', 'Microsoft.Limitless_8wekyb3d8bbwe', 'LocalState', 'StreamedPackages')
+    if not root_streamed_packages_folder or not os.path.exists(root_streamed_packages_folder):
+        print("ERROR: No streamed packages folder specified, nor could one be found automatically.")
+        print()
+        parser.print_help()
+        return
+    print(f"INFO: Using streamed packages folder {root_streamed_packages_folder}")
     
     missing_streamed_package_overrides = check_airports_in_streamed_packages_folder(root_community_folder, root_streamed_packages_folder, args.verbose)
     print("PROGRESS: Scan complete.")
@@ -93,6 +114,8 @@ def main():
     else:
         print("INFO: All necessary streamed package overrides are present in the community folder.")
     print()
+    # pause before exiting
+    input("Press Enter to exit...")
 
 if __name__ == '__main__':    
     main()
