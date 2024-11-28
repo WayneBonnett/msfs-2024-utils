@@ -10,6 +10,15 @@ import os
 import json
 import sys
 
+def os_walk_long_path(root_path):
+    list = os.listdir(root_path)
+    dirs = [x for x in list if os.path.isdir(os.path.join(root_path, x))]
+    files = [x for x in list if os.path.isfile(os.path.join(root_path, x))]
+    yield root_path, dirs, files
+    for dir in dirs:
+        for root, dirs, files in os_walk_long_path(os.path.join(root_path, dir)):
+            yield root, dirs, files
+
 def redirect_print(output_func=None):
     """
     Helper to redirect print statements.
@@ -29,8 +38,8 @@ def redirect_print(output_func=None):
 
 def find_airports_in_community_folder(root_folder, verbose):
     airports = {}
-    for root, dirs, files in os.walk(root_folder):
-        if 'gsx' in root.lower() or 'asobo' in root.lower() or 'microsoft' in root.lower():
+    for root, dirs, files in os_walk_long_path(root_folder):
+        if '-gsx-' in root.lower() or '-asobo-' in root.lower() or '-microsoft-' in root.lower():
             continue
         for file in files:
             if file.lower() == 'contenthistory.json':
@@ -39,7 +48,7 @@ def find_airports_in_community_folder(root_folder, verbose):
                     if 'items' in contentinfo:
                         for item in contentinfo['items']:
                             if 'type' in item and item['type'] == 'Airport':
-                                root_two_levels_up = os.path.dirname(os.path.dirname(root))
+                                root_two_levels_up = os.path.dirname(os.path.dirname(str.replace(root, "\\\\?\\", ""))).split('\\')[-1]
                                 airports[item['content']] = root_two_levels_up
                                 if verbose:
                                     print(f"INFO: Found modded airport {item['content']} in {root_two_levels_up}")
@@ -132,6 +141,7 @@ def main():
         parser.print_help()
         return
     print(f"INFO: Using community folder {root_community_folder}")
+    root_community_folder = u"\\\\?\\" + root_community_folder
     
     root_streamed_packages_folder = args.streamedpackages
     if not root_streamed_packages_folder:
@@ -142,6 +152,7 @@ def main():
         parser.print_help()
         return
     print(f"INFO: Using streamed packages folder {root_streamed_packages_folder}")
+    root_streamed_packages_folder = u"\\\\?\\" + root_streamed_packages_folder
     
     if args.delete:
         print()
