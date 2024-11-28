@@ -3,16 +3,16 @@
 # the "content" field, which is going to be the airport's ICAO code.
 # Then, look for any subfolder in the root streamed packages folder that contiains that ICAO code in its name.
 # Make sure that a subfolder with the same name exists in the root community folder. Report if there is or not.
-version = '0.2'
+version = '0.3'
 
 import argparse
 import os
 import json
 
 def find_airports_in_community_folder(root_folder, verbose):
-    airports = []
+    airports = {}
     for root, dirs, files in os.walk(root_folder):
-        if 'gsx' in root.lower():
+        if 'gsx' in root.lower() or 'asobo' in root.lower() or 'microsoft' in root.lower():
             continue
         for file in files:
             if file.lower() == 'contenthistory.json':
@@ -21,8 +21,8 @@ def find_airports_in_community_folder(root_folder, verbose):
                     if 'items' in contentinfo:
                         for item in contentinfo['items']:
                             if 'type' in item and item['type'] == 'Airport':
-                                airports.append(item['content'])
                                 root_two_levels_up = os.path.dirname(os.path.dirname(root))
+                                airports[item['content']] = root_two_levels_up
                                 if verbose:
                                     print(f"INFO: Found modded airport {item['content']} in {root_two_levels_up}")
     return airports
@@ -31,31 +31,33 @@ def find_airport_in_streamed_packages_folder(root_folder, airport):
     for dir in os.listdir(root_folder):
         if 'landingchallenge' in dir.lower():
             continue
-        if airport.lower() in dir.lower():
+        if f'-{airport.lower()}-' in dir.lower():
             return dir
     return None
 
 # For any airports in the community folder that does have a streamed package equivalent, make sure the streamed
 # package folder also exists in the community folder.
-def check_airports_in_streamed_packages_folder(root_community_folder, root_streamed_packages_folder, verbose):
-    missing_streamed_package_overrides = []
+def check_airports_in_streamed_packages_folder(root_community_folder, root_streamed_packages_folder, report_existing, verbose):
+    missing_streamed_package_overrides = {}
+    existing_streamed_package_overrides = {}
     print(f"PROGRESS: Finding airports in the community folder...")
     airports = find_airports_in_community_folder(root_community_folder, verbose)
     print(f"PROGRESS: Checking streamed package overrides in the community folder...")
-    for airport in airports:
-        streamed_package_folder = find_airport_in_streamed_packages_folder(root_streamed_packages_folder, airport)
+    for airportICAO in airports.keys():
+        streamed_package_folder = find_airport_in_streamed_packages_folder(root_streamed_packages_folder, airportICAO)
         if streamed_package_folder:
             if not os.path.exists(os.path.join(root_community_folder, streamed_package_folder)):
+                missing_streamed_package_overrides[streamed_package_folder] = airports[airportICAO]
                 if verbose:
-                    print(f"WARNING: Modded airport {airport} has a streamed package ({streamed_package_folder}), but no override in the community folder.")
-                missing_streamed_package_overrides.append(streamed_package_folder)
+                    print(f"WARNING: Modded airport {airportICAO} has a streamed package ({streamed_package_folder}), but no override in the community folder.")
             else:
+                existing_streamed_package_overrides[streamed_package_folder] = airports[airportICAO]
                 if verbose:
-                    print(f"INFO: Modded airport {airport} has a streamed package override in the community folder.")
+                    print(f"INFO: Modded airport {airportICAO} has a streamed package override in the community folder.")
         else:
             if verbose:
-                print(f"INFO: Modded airport {airport} has no streamed package.")
-    return missing_streamed_package_overrides
+                print(f"INFO: Modded airport {airportICAO} has no streamed package.")
+    return existing_streamed_package_overrides if report_existing else missing_streamed_package_overrides
    
 def main():
     print(f"check_airports.py v{version}")
@@ -65,8 +67,16 @@ def main():
     parser.add_argument('--community', type=str, help='The root community folder to check.')
     parser.add_argument('--streamedpackages', type=str, help='The root streamed packages folder to check.')
     parser.add_argument('--verbose', action='store_true', help='Print verbose output.')
-    parser.add_argument('--autofix', action='store_true', help='Automatically create missing streamed package overrides to the community folder.')
+    parser.add_argument('--autofix', action='store_true', help='Automatically create missing streamed package overrides to the community folder as empty folders.')
+    parser.add_argument('--autolink', action='store_true', help='Automatically create missing streamed package overrides to the community folder as links.')
+    parser.add_argument('--delete', action='store_true', help='Delete all streamed package overrides in the community folder.')
     args = parser.parse_args()
+    
+    if int(args.autofix) + int(args.autolink) + int(args.delete) > 1:
+        print("ERROR: Only one of --autofix, --autolink, or --delete can be specified.")
+        print()
+        parser.print_help()
+        return
     
     root_community_folder = args.community
     if not root_community_folder:
@@ -74,6 +84,8 @@ def main():
         # '%localappdata%\Packages\Microsoft.Limitless_8wekyb3d8bbwe\LocalCache\usercfg.opt' 
         # and looking for the 'InstalledPackagesPath' key
         usercfg_path = os.path.join(os.getenv('LOCALAPPDATA'), 'Packages', 'Microsoft.Limitless_8wekyb3d8bbwe', 'LocalCache', 'usercfg.opt')
+        if not os.path.exists(usercfg_path):
+            usercfg_path = os.path.join(os.getenv('APPDATA'), 'Microsoft Flight Simulator 2024', 'usercfg.opt')
         if os.path.exists(usercfg_path):
             with open(usercfg_path, 'r') as f:
                 for line in f:
@@ -93,6 +105,8 @@ def main():
     if not root_streamed_packages_folder:
         # check if %localappdata%\Packages\Microsoft.Limitless_8wekyb3d8bbwe\LocalState\StreamedPackages exists
         root_streamed_packages_folder = os.path.join(os.getenv('LOCALAPPDATA'), 'Packages', 'Microsoft.Limitless_8wekyb3d8bbwe', 'LocalState', 'StreamedPackages')
+        if not os.path.exists(root_streamed_packages_folder):
+            root_streamed_packages_folder = os.path.join(os.getenv('APPDATA'), 'Microsoft Flight Simulator 2024', 'StreamedPackages')
     if not root_streamed_packages_folder or not os.path.exists(root_streamed_packages_folder):
         print("ERROR: No streamed packages folder specified, nor could one be found automatically.")
         print()
@@ -100,19 +114,35 @@ def main():
         return
     print(f"INFO: Using streamed packages folder {root_streamed_packages_folder}")
     
-    missing_streamed_package_overrides = check_airports_in_streamed_packages_folder(root_community_folder, root_streamed_packages_folder, args.verbose)
-    print("PROGRESS: Scan complete.")
-    print()
-    print("SUMMARY")
-    if missing_streamed_package_overrides:
-        print(f"WARNING: The following streamed package overrides are missing from the community folder:")
-        for missing_streamed_package_override in missing_streamed_package_overrides:
-            print(f"  {missing_streamed_package_override}")
-            if args.autofix:
-                print(f"    INFO: Automatically creating missing streamed package override {missing_streamed_package_override} in the community folder.")
-                os.makedirs(os.path.join(root_community_folder, missing_streamed_package_override))
+    if args.delete:
+        print()
+        # for each folder in community that matches the name of a folder in streamedpackages and is a symlink or an empty folder, delete it
+        print("PROGRESS: Deleting all streamed package overrides in the community folder...")
+        for dir in os.listdir(root_community_folder):
+            if os.path.isdir(os.path.join(root_community_folder, dir)) and os.path.exists(os.path.join(root_streamed_packages_folder, dir)):
+                if os.path.islink(os.path.join(root_community_folder, dir)):
+                    print(f"INFO: Unlinking override {dir}.")
+                    os.rmdir(os.path.join(root_community_folder, dir))
+                elif not os.listdir(os.path.join(root_community_folder, dir)):
+                    print(f"INFO: Deleting empty folder override {dir}.")
+                    os.rmdir(os.path.join(root_community_folder, dir))
     else:
-        print("INFO: All necessary streamed package overrides are present in the community folder.")
+        streamed_package_overrides = check_airports_in_streamed_packages_folder(root_community_folder, root_streamed_packages_folder, False, args.verbose)
+        print("PROGRESS: Scan complete.")
+        print()
+        print("SUMMARY")
+        if streamed_package_overrides:
+            print(f"WARNING: The following streamed package overrides are missing from the community folder:")
+            for streamed_package in streamed_package_overrides.keys():
+                print(f"  {streamed_package}")
+                if args.autolink:
+                    print(f"    INFO: Creating link override for {streamed_package} in the community folder.")
+                    os.symlink(os.path.join(root_community_folder, streamed_package_overrides[streamed_package]), os.path.join(root_community_folder, streamed_package), target_is_directory=True)
+                elif args.autofix:
+                    print(f"    INFO: Creating empty folder override for {streamed_package} in the community folder.")
+                    os.makedirs(os.path.join(root_community_folder, streamed_package))
+        else:
+            print("INFO: All necessary streamed package overrides are present in the community folder.")
     print()
     # pause before exiting
     input("Press Enter to exit...")
