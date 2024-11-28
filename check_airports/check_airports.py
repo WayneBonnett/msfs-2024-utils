@@ -48,7 +48,7 @@ def find_airports_in_community_folder(root_folder, verbose):
                     if 'items' in contentinfo:
                         for item in contentinfo['items']:
                             if 'type' in item and item['type'] == 'Airport':
-                                root_two_levels_up = os.path.dirname(os.path.dirname(str.replace(root, "\\\\?\\", ""))).split('\\')[-1]
+                                root_two_levels_up = os.path.dirname(os.path.dirname(root.replace("\\\\?\\", ""))).split('\\')[-1]
                                 airports[item['content']] = root_two_levels_up
                                 if verbose:
                                     print(f"INFO: Found modded airport {item['content']} in {root_two_levels_up}")
@@ -141,7 +141,7 @@ def main():
         parser.print_help()
         return
     print(f"INFO: Using community folder {root_community_folder}")
-    root_community_folder = u"\\\\?\\" + root_community_folder
+    root_community_folder = u"\\\\?\\" + root_community_folder.replace("/", "\\")
     
     root_streamed_packages_folder = args.streamedpackages
     if not root_streamed_packages_folder:
@@ -152,7 +152,7 @@ def main():
         parser.print_help()
         return
     print(f"INFO: Using streamed packages folder {root_streamed_packages_folder}")
-    root_streamed_packages_folder = u"\\\\?\\" + root_streamed_packages_folder
+    root_streamed_packages_folder = u"\\\\?\\" + root_streamed_packages_folder.replace("/", "\\")
     
     if args.delete:
         print()
