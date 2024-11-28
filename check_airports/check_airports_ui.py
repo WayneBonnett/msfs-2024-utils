@@ -44,7 +44,8 @@ class AirportCheckerUI:
         
         # Run Button
         self.run_button = tk.Button(root, text="Run", command=self.run_check)
-        self.run_button.grid(row=6, column=0, columnspan=3, pady=10)
+        self.run_button.grid(row=6, column=0, padx=5, pady=10, sticky="w")
+        tk.Button(root, text="Save Log", command=self.save_log).grid(row=6, column=2, padx=5, pady=10)
         
         # Output Area
         self.output_area = scrolledtext.ScrolledText(root, width=70, height=20, wrap=tk.WORD)
@@ -59,6 +60,12 @@ class AirportCheckerUI:
         
         # Save window position on exit
         self.root.protocol("WM_DELETE_WINDOW", self.on_exit)
+        
+    def save_log(self):
+        filename = filedialog.asksaveasfilename(title="Save Log As", defaultextension=".txt", filetypes=[("Text Files", "*.txt")])
+        if filename:
+            with open(filename, "w") as f:
+                f.write(self.output_area.get("1.0", tk.END))
         
     def restore_window_position(self):
         try:
