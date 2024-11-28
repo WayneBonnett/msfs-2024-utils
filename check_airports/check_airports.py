@@ -3,11 +3,29 @@
 # the "content" field, which is going to be the airport's ICAO code.
 # Then, look for any subfolder in the root streamed packages folder that contiains that ICAO code in its name.
 # Make sure that a subfolder with the same name exists in the root community folder. Report if there is or not.
-version = '0.3'
+version = '0.4'
 
 import argparse
 import os
 import json
+import sys
+
+def redirect_print(output_func=None):
+    """
+    Helper to redirect print statements.
+    If `output_func` is provided, all print statements will call `output_func` instead of writing to stdout.
+    """
+    class PrintRedirector:
+        def write(self, message):
+            if output_func:
+                output_func(message)
+            else:
+                sys.__stdout__.write(message)
+        def flush(self):  # Required to support file-like behavior
+            pass
+
+    sys.stdout = PrintRedirector()
+    sys.stderr = PrintRedirector()
 
 def find_airports_in_community_folder(root_folder, verbose):
     airports = {}
@@ -58,6 +76,32 @@ def check_airports_in_streamed_packages_folder(root_community_folder, root_strea
             if verbose:
                 print(f"INFO: Modded airport {airportICAO} has no streamed package.")
     return existing_streamed_package_overrides if report_existing else missing_streamed_package_overrides
+
+def autodetect_community_folder():
+    root_community_folder = None
+    # try to automatically determine the community folder by parsing 
+    # '%localappdata%\Packages\Microsoft.Limitless_8wekyb3d8bbwe\LocalCache\usercfg.opt' 
+    # and looking for the 'InstalledPackagesPath' key
+    usercfg_path = os.path.join(os.getenv('LOCALAPPDATA'), 'Packages', 'Microsoft.Limitless_8wekyb3d8bbwe', 'LocalCache', 'usercfg.opt')
+    if not os.path.exists(usercfg_path):
+        usercfg_path = os.path.join(os.getenv('APPDATA'), 'Microsoft Flight Simulator 2024', 'usercfg.opt')
+    if os.path.exists(usercfg_path):
+        with open(usercfg_path, 'r') as f:
+            for line in f:
+                if 'InstalledPackagesPath' in line:
+                    root_installed_packages_folder = line.split(' ', 1)[1].strip().replace('"', '')
+                    root_community_folder = os.path.join(root_installed_packages_folder, 'Community')
+                    break
+    return root_community_folder
+
+def autodetect_streamed_packages_folder():
+    root_streamed_packages_folder = None
+    # try to automatically determine the streamed packages folder by looking for 
+    # '%localappdata%\Packages\Microsoft.Limitless_8wekyb3d8bbwe\LocalState\StreamedPackages'
+    root_streamed_packages_folder = os.path.join(os.getenv('LOCALAPPDATA'), 'Packages', 'Microsoft.Limitless_8wekyb3d8bbwe', 'LocalState', 'StreamedPackages')
+    if not os.path.exists(root_streamed_packages_folder):
+        root_streamed_packages_folder = os.path.join(os.getenv('APPDATA'), 'Microsoft Flight Simulator 2024', 'StreamedPackages')
+    return root_streamed_packages_folder
    
 def main():
     print(f"check_airports.py v{version}")
@@ -70,6 +114,7 @@ def main():
     parser.add_argument('--autofix', action='store_true', help='Automatically create missing streamed package overrides to the community folder as empty folders.')
     parser.add_argument('--autolink', action='store_true', help='Automatically create missing streamed package overrides to the community folder as links.')
     parser.add_argument('--delete', action='store_true', help='Delete all streamed package overrides in the community folder.')
+    parser.add_argument('--noinput', action='store_true', help='Disable user input prompts.')
     args = parser.parse_args()
     
     if int(args.autofix) + int(args.autolink) + int(args.delete) > 1:
@@ -80,20 +125,7 @@ def main():
     
     root_community_folder = args.community
     if not root_community_folder:
-        # try to automatically determine the community folder by parsing 
-        # '%localappdata%\Packages\Microsoft.Limitless_8wekyb3d8bbwe\LocalCache\usercfg.opt' 
-        # and looking for the 'InstalledPackagesPath' key
-        usercfg_path = os.path.join(os.getenv('LOCALAPPDATA'), 'Packages', 'Microsoft.Limitless_8wekyb3d8bbwe', 'LocalCache', 'usercfg.opt')
-        if not os.path.exists(usercfg_path):
-            usercfg_path = os.path.join(os.getenv('APPDATA'), 'Microsoft Flight Simulator 2024', 'usercfg.opt')
-        if os.path.exists(usercfg_path):
-            with open(usercfg_path, 'r') as f:
-                for line in f:
-                    if 'InstalledPackagesPath' in line:
-                        root_installed_packages_folder = line.split(' ', 1)[1].strip().replace('"', '')
-                        root_community_folder = os.path.join(root_installed_packages_folder, 'Community')
-                        break
-                    
+        root_community_folder = autodetect_community_folder()                    
     if not root_community_folder or not os.path.exists(root_community_folder):
         print("ERROR: No community folder specified, nor could one be found automatically.")
         print()
@@ -103,10 +135,7 @@ def main():
     
     root_streamed_packages_folder = args.streamedpackages
     if not root_streamed_packages_folder:
-        # check if %localappdata%\Packages\Microsoft.Limitless_8wekyb3d8bbwe\LocalState\StreamedPackages exists
-        root_streamed_packages_folder = os.path.join(os.getenv('LOCALAPPDATA'), 'Packages', 'Microsoft.Limitless_8wekyb3d8bbwe', 'LocalState', 'StreamedPackages')
-        if not os.path.exists(root_streamed_packages_folder):
-            root_streamed_packages_folder = os.path.join(os.getenv('APPDATA'), 'Microsoft Flight Simulator 2024', 'StreamedPackages')
+        root_streamed_packages_folder = autodetect_streamed_packages_folder()
     if not root_streamed_packages_folder or not os.path.exists(root_streamed_packages_folder):
         print("ERROR: No streamed packages folder specified, nor could one be found automatically.")
         print()
@@ -143,9 +172,10 @@ def main():
                     os.makedirs(os.path.join(root_community_folder, streamed_package))
         else:
             print("INFO: All necessary streamed package overrides are present in the community folder.")
-    print()
-    # pause before exiting
-    input("Press Enter to exit...")
+    if not args.noinput:
+        print()
+        # pause before exiting
+        input("Press Enter to exit...")
 
 if __name__ == '__main__':    
     main()
