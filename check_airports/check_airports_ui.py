@@ -38,9 +38,9 @@ class AirportCheckerUI:
         
         tk.Checkbutton(root, text="Verbose Output", variable=self.verbose_var).grid(row=2, column=0, padx=5, pady=0, sticky="w")
         tk.Radiobutton(root, text="Check For Missing Overrides", variable=self.mode_var, value="check").grid(row=2, column=1, padx=5, pady=0, sticky="w")
-        tk.Radiobutton(root, text="Autofix Missing Overrides", variable=self.mode_var, value="autofix").grid(row=3, column=1, padx=5, pady=0, sticky="w")
-        tk.Radiobutton(root, text="Autolink Missing Overrides", variable=self.mode_var, value="autolink").grid(row=4, column=1, padx=5, pady=0, sticky="w")
-        tk.Radiobutton(root, text="Delete Overrides", variable=self.mode_var, value="delete").grid(row=5, column=1, padx=5, pady=0, sticky="w")
+        tk.Radiobutton(root, text="Add Overrides: Links (Recommended)", variable=self.mode_var, value="autolink").grid(row=3, column=1, padx=5, pady=0, sticky="w")
+        tk.Radiobutton(root, text="Add Overrides: Empty Folders", variable=self.mode_var, value="autofix").grid(row=4, column=1, padx=5, pady=0, sticky="w")
+        tk.Radiobutton(root, text="Remove Overrides", variable=self.mode_var, value="delete").grid(row=5, column=1, padx=5, pady=0, sticky="w")
         
         # Run Button
         self.run_button = tk.Button(root, text="Run", command=self.run_check)
