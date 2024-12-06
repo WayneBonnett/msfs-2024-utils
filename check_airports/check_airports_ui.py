@@ -19,15 +19,19 @@ class AirportCheckerUI:
         # Community Folder Selection
         tk.Label(root, text="Community Folder:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
         self.community_folder_var = tk.StringVar()
-        self.community_folder_var.set(autodetect_community_folder() or "")
         tk.Entry(root, textvariable=self.community_folder_var, width=130).grid(row=0, column=1, padx=5, pady=5)
         tk.Button(root, text="Browse", command=self.browse_community_folder).grid(row=0, column=2, padx=5, pady=5)
         
         # Streamed Packages Folder Selection
         tk.Label(root, text="Streamed Packages Folder:").grid(row=1, column=0, padx=5, pady=5, sticky="e")
         self.streamed_folder_var = tk.StringVar()
-        self.streamed_folder_var.set(autodetect_streamed_packages_folder() or "")
         tk.Entry(root, textvariable=self.streamed_folder_var, width=130).grid(row=1, column=1, padx=5, pady=5)
+        
+        self.restore_last_used_paths()
+        if not self.community_folder_var.get():
+            self.community_folder_var.set(autodetect_community_folder() or "")
+        if not self.streamed_folder_var.get():
+            self.streamed_folder_var.set(autodetect_streamed_packages_folder() or "")
         
         tk.Button(root, text="Browse", command=self.browse_streamed_folder).grid(row=1, column=2, padx=5, pady=5)
         
@@ -75,9 +79,23 @@ class AirportCheckerUI:
                 self.root.geometry(geometry)
         except (FileNotFoundError, json.JSONDecodeError):
             self.root.geometry("1024x768")  # Default geometry
+            
+    def restore_last_used_paths(self):
+        try:
+            with open(self.CONFIG_FILE, "r") as f:
+                config = json.load(f)
+                self.community_folder_var.set(config.get("community_folder", ""))
+                self.streamed_folder_var.set(config.get("streamed_folder", ""))
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
 
     def on_exit(self):
-        config = {"geometry": self.root.geometry()}
+        config = {}
+        # Save window geometry
+        config["geometry"] = self.root.geometry()
+        # Add the two paths last used to the config
+        config["community_folder"] = self.community_folder_var.get()
+        config["streamed_folder"] = self.streamed_folder_var.get()
         with open(self.CONFIG_FILE, "w") as f:
             json.dump(config, f)
         self.root.destroy()  # Close the application
