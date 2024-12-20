@@ -14,9 +14,6 @@ known_airframes = {
 }
 
 # Read arguments
-# pax
-# cargo
-# estimated_takeoff_weight
 parser = argparse.ArgumentParser()
 parser.add_argument("--username", type=str)
 parser.add_argument("--airframe", type=str)
@@ -32,7 +29,8 @@ if args.desired_pax is not None and args.desired_freight is not None:
 airframe = known_airframes.get(args.airframe) or next((airframe for airframe in known_airframes.values() if airframe["id"] == args.airframe), None)
 if airframe is None:
     raise ValueError(f"Unknown airframe: {args.airframe}")
-max_pax = airframe["max_pax"]
+
+max_pax = int(airframe["max_pax"])
 
 # get the latest simbrief ofp json
 simbrief_ofp_url = f"https://www.simbrief.com/api/xml.fetcher.php?username={args.username}&json=1"
@@ -112,7 +110,7 @@ if args.desired_freight is None:
 
     # if max_freight is negative, we need to adjust the number of passengers until the freight is at least 0    
     if final_freight < 0:
-        print(f"Removing passengers because we're overweight")
+        print("Removing passengers because we're overweight")
         removed_passengers = math.ceil(-final_freight / total_zfw_per_pax)
         print(f"Removing {removed_passengers} passengers")
         final_pax -= removed_passengers
@@ -132,7 +130,7 @@ if args.desired_freight is None:
 
         # if max_freight is negative, we need to adjust the number of passengers until the freight is at least 0
         if final_freight < 0:
-            print(f"Removing passengers because we're overweight")
+            print("Removing passengers because we're overweight")
             removed_passengers = math.ceil(-final_freight / total_zfw_per_pax)
             print(f"Removing {removed_passengers} passengers")
             final_pax -= removed_passengers
