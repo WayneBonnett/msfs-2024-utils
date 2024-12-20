@@ -11,7 +11,7 @@ class AirportCheckerUI:
         self.CONFIG_FILE = "config.json"
         
         self.root = root
-        self.root.title(f"Airport Checker Tool for MSFS 2024 - v{version}")
+        self.root.title(f"Airport Override Checker for MSFS 2024 - v{version}")
         
         # Restore window geometry from config file
         self.restore_window_position()
