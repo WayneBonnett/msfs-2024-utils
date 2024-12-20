@@ -87,6 +87,8 @@ if args.desired_freight is None:
         final_freight = freight + additional_freight
         print(f"New freight: {int(final_freight)}")
         print("=================================================")
+    
+    final_pax = pax
     # How many additional passengers with baggage could we add?
     additional_pax = int(min(remaining_takeoff_weight // total_zfw_per_pax, max_pax - pax))
     if additional_pax != 0:
