@@ -15,8 +15,8 @@ known_airframes = {
 
 # Read arguments
 parser = argparse.ArgumentParser()
-parser.add_argument("--username", type=str)
-parser.add_argument("--airframe", type=str)
+parser.add_argument("--username", type=str, default=None)
+parser.add_argument("--airframe", type=str, default=None)
 parser.add_argument("--desired_pax", type=int, default=None)
 parser.add_argument("--desired_freight", type=int, default=None)
 args = parser.parse_args()
@@ -24,17 +24,29 @@ args = parser.parse_args()
 if args.desired_pax is not None and args.desired_freight is not None:
     raise ValueError("You can't specify both desired_pax and desired_freight")
 
-# Get airframe data
-# Find the airframe in the known_airframes dictionary via the airframe argument, either as the dictionary key or the "id" value
-airframe = known_airframes.get(args.airframe) or next((airframe for airframe in known_airframes.values() if airframe["id"] == args.airframe), None)
-if airframe is None:
-    raise ValueError(f"Unknown airframe: {args.airframe}")
+if args.username is None:
+    # Prompt the user for their SimBrief username
+    args.username = input("Enter your SimBrief username: ")
 
-max_pax = int(airframe["max_pax"])
+airframe : dict[str, object] | None = {}
+max_pax = 0
+if args.airframe is None:
+    # Prompt the user for the airframe
+    airframe = input("Enter the airframe id (empty for custom): ")
+    if airframe == "":
+        # Prompt the user for the details of the custom airframe
+        max_pax = int(input("Enter the maximum number of passengers: "))
+else:
+    # Get airframe data
+    # Find the airframe in the known_airframes dictionary via the airframe argument, either as the dictionary key or the "id" value
+    airframe = known_airframes.get(args.airframe) or next((airframe for airframe in known_airframes.values() if airframe["id"] == args.airframe), None)
+    if airframe is None:
+        raise ValueError(f"Unknown airframe: {args.airframe}")
+    max_pax = int(airframe["max_pax"])
 
 # get the latest simbrief ofp json
 simbrief_ofp_url = f"https://www.simbrief.com/api/xml.fetcher.php?username={args.username}&json=1"
-response = requests.get(simbrief_ofp_url)
+response = requests.get(simbrief_ofp_url, timeout=10)
 response.raise_for_status()
 simbrief_ofp = response.json()
 
