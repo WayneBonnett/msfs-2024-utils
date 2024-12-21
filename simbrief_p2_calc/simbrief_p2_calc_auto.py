@@ -32,11 +32,12 @@ airframe : dict[str, object] | None = {}
 max_pax = 0
 if args.airframe is None:
     # Prompt the user for the airframe
-    airframe = input("Enter the airframe id (empty for custom): ")
-    if airframe == "":
+    args.airframe = input("Enter the airframe id (empty for custom): ")
+    if args.airframe == "":
         # Prompt the user for the details of the custom airframe
         max_pax = int(input("Enter the maximum number of passengers: "))
-else:
+
+if args.airframe != "":
     # Get airframe data
     # Find the airframe in the known_airframes dictionary via the airframe argument, either as the dictionary key or the "id" value
     airframe = known_airframes.get(args.airframe) or next((airframe for airframe in known_airframes.values() if airframe["id"] == args.airframe), None)
@@ -164,3 +165,5 @@ else:
 
 print(f"Final pax: {int(final_pax)}")
 print(f"Final max freight: {int(final_freight)}")
+print("=================================================")
+input("Press Enter to exit...")
