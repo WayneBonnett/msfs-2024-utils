@@ -10,6 +10,7 @@ known_airframes = {
     "Fenix A320 IAE": { 
         "id": "a320iae", 
         "max_pax": 170, 
+        "zfw_to_block_fuel_ratio": 6.66,
     }
 }
 
@@ -36,12 +37,14 @@ if args.username is None:
 
 airframe : dict[str, object] | None = {}
 max_pax = 0
+zfw_to_block_fuel_ratio = 6.66
 if args.airframe is None:
     # Prompt the user for the airframe
     args.airframe = input("Enter the airframe id (empty for custom): ")
     if args.airframe == "":
         # Prompt the user for the details of the custom airframe
         max_pax = int(input("Enter the maximum number of passengers: "))
+        zfw_to_block_fuel_ratio = float(input("Enter the zero fuel weight to block fuel ratio: "))
 
 if args.airframe != "":
     # Get airframe data
@@ -107,11 +110,20 @@ while True:
     print(f"Estimated takeoff weight: {int(etow)}")
     remaining_takeoff_weight = max_takeoff_weight - etow
     print(f"Remaining takeoff weight: {int(remaining_takeoff_weight)}")
+    
+    max_zerofuel_weight = float(simbrief_ofp["weights"]["max_zfw"])
+    print(f"Max zero fuel weight: {int(max_zerofuel_weight)}")
+    ezfw = float(simbrief_ofp["weights"]["est_zfw"])
+    print(f"Estimated zero fuel weight: {int(ezfw)}")
+    remaining_zerofuel_weight = max_zerofuel_weight - ezfw
+    print(f"Remaining zero fuel weight: {int(remaining_zerofuel_weight)}")
+    
     cargo_per_pax = float(simbrief_ofp["weights"]["bag_weight"])
     print(f"Cargo per pax: {cargo_per_pax}")
     person_weight_per_pax = float(simbrief_ofp["weights"]["pax_weight"])
     print(f"Person weight per pax: {person_weight_per_pax}")
     total_zfw_per_pax = person_weight_per_pax + cargo_per_pax
+    total_tow_per_pax = total_zfw_per_pax + (total_zfw_per_pax / zfw_to_block_fuel_ratio)
 
     pax = int(simbrief_ofp["weights"]["pax_count_actual"])
     print(f"Actual pax: {pax}")
@@ -121,6 +133,24 @@ while True:
     print(f"Freight: {freight}")
     extra_cargo = float(simbrief_ofp["weights"]["cargo"]) - freight - bags * cargo_per_pax
     print(f"Extra cargo: {math.ceil(extra_cargo)}")
+    
+    def tow_to_zfw(tow : float):
+        return tow * zfw_to_block_fuel_ratio / (1 + zfw_to_block_fuel_ratio)
+        
+    def min_remaining_weight():
+        return min(tow_to_zfw(remaining_takeoff_weight), remaining_zerofuel_weight)
+    
+    def modify_remaining_weights_by_zfw_delta(delta : float, do_print : bool = True):
+        global remaining_takeoff_weight, remaining_zerofuel_weight
+        remaining_takeoff_weight += delta
+        remaining_zerofuel_weight += delta
+        
+        block_fuel_removed = delta / zfw_to_block_fuel_ratio
+        remaining_takeoff_weight += block_fuel_removed
+        
+        if do_print:
+            print(f"Remaining takeoff weight: {int(remaining_takeoff_weight)}")
+            print(f"Remaining zero fuel weight: {int(remaining_zerofuel_weight)}")
 
     print("=================================================")
     print("Calculations")
@@ -132,23 +162,15 @@ while True:
         print(f"Removing {removed_passengers} passengers")
         pax -= removed_passengers
         print(f"New pax: {pax}")
-        etow -= removed_passengers * person_weight_per_pax
-        remaining_takeoff_weight = max_takeoff_weight - etow
-        print(f"Remaining takeoff weight: {int(remaining_takeoff_weight)}")
+        modify_remaining_weights_by_zfw_delta(removed_passengers * person_weight_per_pax)
         print("=================================================")
 
     if args.desired_freight is None:
-        final_freight = float(freight)
-        if remaining_takeoff_weight != 0:
-            additional_freight = remaining_takeoff_weight
-            print(f"Remaining takeoff weight added to freight: {int(additional_freight)}")
-            final_freight = freight + additional_freight
-            print(f"New freight: {int(final_freight)}")
-            print("=================================================")
-        
+        final_freight = float(freight)        
         final_pax = pax
+        
         # How many additional passengers with baggage could we add?
-        additional_pax = int(min(remaining_takeoff_weight // total_zfw_per_pax, max_pax - pax))
+        additional_pax = int(min(min_remaining_weight() // total_zfw_per_pax, max_pax - pax))
         if additional_pax != 0:
             print(f"There's room for {additional_pax} extra passengers with baggage")
 
@@ -156,8 +178,11 @@ while True:
             print(f"New pax: {final_pax}")
             
             # Assuming we take on the maximum number of additional passengers, do we still have room for freight?
-            remaining_takeoff_weight -= additional_pax * total_zfw_per_pax
-            additional_freight = remaining_takeoff_weight
+            modify_remaining_weights_by_zfw_delta(-additional_pax * total_zfw_per_pax)
+            
+            additional_freight = min_remaining_weight()
+            print(f"There's room for {int(additional_freight)} extra freight")
+            modify_remaining_weights_by_zfw_delta(-additional_freight)
             final_freight = freight + additional_freight
             print(f"New freight: {int(final_freight)}")
             print("=================================================")
@@ -201,13 +226,13 @@ while True:
         print(f"Desired freight: {desired_freight}")
         extra_freight = desired_freight - freight
         print(f"Extra freight: {extra_freight}")
-        remaining_takeoff_weight -= extra_freight
-        print(f"Remaining takeoff weight: {int(remaining_takeoff_weight)}")
-        additional_pax = int(min(remaining_takeoff_weight // total_zfw_per_pax, max_pax - pax))
+        modify_remaining_weights_by_zfw_delta(-extra_freight)
+        additional_pax = int(min(min_remaining_weight() // total_zfw_per_pax, max_pax - pax))
         print(f"There's room for {additional_pax} extra passengers with baggage")
-        remaining_takeoff_weight -= additional_pax * total_zfw_per_pax
+        modify_remaining_weights_by_zfw_delta(-additional_pax * total_zfw_per_pax)
         final_pax = pax + additional_pax
-        final_freight = freight + extra_freight + remaining_takeoff_weight
+        final_freight = freight + extra_freight + min_remaining_weight()
+        modify_remaining_weights_by_zfw_delta(-min_remaining_weight())
         print("=================================================")
 
     print(f"Final pax: {int(final_pax)}")
