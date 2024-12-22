@@ -3,22 +3,37 @@
 # pylint: disable=line-too-long
 
 import argparse
+import json
 import locale
 import math
 import requests
+import os.path
+import sys
+
+VERSION = "0.1.1"
 
 locale.setlocale(locale.LC_ALL, '')
 
-known_airframes = {
-    "Fenix A320 IAE": { 
-        "id": "a320iae", 
-        "max_pax": 170, 
-    }
-}
+print("=================================================")
+print(f"Simbrief Passenger2 Calculator v{VERSION}")
+print("=================================================")
 
-print("=================================================")
-print("Simbrief Passenger2 Calculator")
-print("=================================================")
+# Load known airframes
+known_airframes = {}
+bundled_exe_dir = os.path.abspath(os.path.dirname(sys.executable))
+airframes_path = os.path.join(bundled_exe_dir, "airframes.json")
+if not os.path.exists(airframes_path):
+    airframes_path = "airframes.json"
+if not os.path.exists(airframes_path):
+    airframes_path = ""
+if airframes_path:
+    try:
+        with open(airframes_path, "r", encoding="utf8") as f:
+            known_airframes = json.load(f)
+            print(f"Loaded {len(known_airframes)} known airframes from airframes.json")
+            print("=================================================")
+    except Exception as e:
+        print(f"Failed to load known airframes from airframes.json: {e}")
 
 # Read arguments
 parser = argparse.ArgumentParser()
