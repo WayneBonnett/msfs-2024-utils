@@ -1,5 +1,9 @@
 """ Figure out max number of passengers and freight for a given simbrief plan """
 
+# I can't name the company and crew add-on I originally created this as an accompanying
+# tool for because they filed trademark complaints with flightsim.to, who subsequently
+# took down the listing, so here's hoping you can guess which one it is!
+
 # pylint: disable=line-too-long
 
 import argparse
@@ -10,12 +14,13 @@ import requests
 import os.path
 import sys
 
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 
 locale.setlocale(locale.LC_ALL, '')
 
 print("=================================================")
-print(f"Simbrief Passenger2 Calculator v{VERSION}")
+print("Simbrief Payload Maximizer")
+print(f"v{VERSION}")
 print("=================================================")
 
 # Load known airframes
