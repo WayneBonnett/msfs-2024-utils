@@ -87,7 +87,7 @@ while True:
             print("(1) Calculate max number of passengers and freight based on max passengers")
             print("(2) Calculate max freight based on desired number of passengers")
             print("(3) Calculate max number of passengers based on desired freight")
-            print("(4) Update Simbrief OFP with final values from P2")
+            print("(4) Update Simbrief OFP with new passenger and freight values")
             print("(0) Exit")
             input_value = input("Select option: ")
             if input_value == "0":
