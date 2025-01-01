@@ -9,6 +9,7 @@ from SimConnect import SimConnect, AircraftRequests, AircraftEvents
 version = "0.1"
 
 print(f"MSFS2024 Sim Time Rate Adjuster v{version}")
+print("=====================================")
 
 # Hardcoded offset that stores the seconds offset from the real world time.
 # This is quite likely to break in future MSFS updates.
@@ -70,7 +71,7 @@ for i in range(len(found_addresses) - 1):
         seconds_offset_address = found_addresses[i+1] + 0x34
         print(f"Seconds offset address: 0x{seconds_offset_address:X}")
         seconds_offset = pm.read_float(seconds_offset_address)
-        print(f"Current seconds offset: {seconds_offset}")
+        print(f"Current seconds offset: {int(seconds_offset)}")
         break
 
 if seconds_offset_address == 0x0:
@@ -124,7 +125,7 @@ try:
             seconds_offset = pm.read_float(seconds_offset_address)
             new_seconds_offset = seconds_offset + diff_int
             pm.write_float(seconds_offset_address, new_seconds_offset)
-            print(f"Setting new seconds offset: {new_seconds_offset}")
+            print(f"Setting new seconds offset: {int(new_seconds_offset)}")
 except KeyboardInterrupt:
     print("Exiting...")
     exit(0)
