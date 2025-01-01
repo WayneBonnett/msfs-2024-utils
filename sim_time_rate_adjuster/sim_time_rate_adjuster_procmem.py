@@ -1,6 +1,8 @@
 ''' A script that watches for changes in the simulation rate, and adjusts the simulation time accordingly. '''
 
+import os
 import re
+import sys
 from time import sleep, time
 
 import pymem
@@ -26,6 +28,11 @@ while True:
         if not printed_waiting_to_start:
             print("Waiting for FlightSimulator2024.exe to start...")
             printed_waiting_to_start = True
+    except pymem.exception.CouldNotOpenProcess:
+        print("Could not open FlightSimulator2024.exe process.")
+        print("The script needs to run on the same level of elevation as MSFS 2024 itself.")
+        print("If you're running the game as admin, you'll need to run this script as admin as well.")
+        os.system("pause")
     sleep(1)
 
 base_address = pm.base_address
@@ -76,7 +83,7 @@ for i in range(len(found_addresses) - 1):
 
 if seconds_offset_address == 0x0:
     print("Could not find the seconds offset address.")
-    exit(-1)
+    sys.exit(-1)
     
 print("=====================================")
 print("Initialization complete.")
@@ -128,13 +135,13 @@ try:
             print(f"Setting new seconds offset: {int(new_seconds_offset)}")
 except KeyboardInterrupt:
     print("Exiting...")
-    exit(0)
+    sys.exit(0)
 except OSError:
     print("MSFS process likely exited. Exiting...")
-    exit(0)
+    sys.exit(0)
 except pymem.exception.MemoryReadError:
     print("Memory read error. MSFS process likely exited. Exiting...")
-    exit(0)
+    sys.exit(0)
 except pymem.exception.MemoryWriteError:
     print("Memory write error. MSFS process likely exited. Exiting...")
-    exit(0)
+    sys.exit(0)
