@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 import tkinter as tk
@@ -8,7 +9,7 @@ from sim_time_rate_adjuster_procmem import main, backend_state, state_lock, VERS
 class SimAdjusterUI:
     # config file under appdata
     CONFIG_FILE = "config.json"
-    DEFAULT_GEOMETRY = "400x125"
+    DEFAULT_GEOMETRY = "+0+0"
     
     def __init__(self, root):
         self.root = root
@@ -18,17 +19,24 @@ class SimAdjusterUI:
         self.connection_status_label = ttk.Label(root, text="Connection Status: Disconnected", foreground="red")
         self.connection_status_label.grid(row=0, column=0, sticky="w", padx=10, pady=5)
 
+        # --- Time Labels ---
+        self.system_time_label = ttk.Label(root, text="System Time: N/A")
+        self.system_time_label.grid(row=1, column=0, sticky="w", padx=10, pady=5)
+                
+        self.in_sim_time_label = ttk.Label(root, text="In-Sim Time: N/A")
+        self.in_sim_time_label.grid(row=2, column=0, sticky="w", padx=10, pady=5)
+        
         # --- Simulation Rate ---
         self.sim_rate_label = ttk.Label(root, text="Simulation Rate: N/A")
-        self.sim_rate_label.grid(row=1, column=0, sticky="w", padx=10, pady=5)
+        self.sim_rate_label.grid(row=3, column=0, sticky="w", padx=10, pady=5)
 
         # --- Seconds Offset ---
         self.seconds_offset_label = ttk.Label(root, text="Seconds Offset: N/A")
-        self.seconds_offset_label.grid(row=2, column=0, sticky="w", padx=10, pady=5)
+        self.seconds_offset_label.grid(row=4, column=0, sticky="w", padx=10, pady=5)
 
         # --- Expandable Output Console ---
         self.expand_button = ttk.Button(root, text="Expand Console", command=self.toggle_console)
-        self.expand_button.grid(row=3, column=0, sticky="w", padx=10, pady=5)
+        self.expand_button.grid(row=5, column=0, sticky="w", padx=10, pady=5)
 
         self.console_frame = ttk.Frame(root)
         self.console_text = scrolledtext.ScrolledText(self.console_frame, wrap=tk.WORD, height=10, state='disabled')
@@ -75,7 +83,11 @@ class SimAdjusterUI:
                 foreground="green" if backend_state['connection_status'] == "Connected" else "red"
             )
             self.sim_rate_label.config(text=f"Simulation Rate: {backend_state['simulation_rate']}x" if backend_state['connection_status'] == "Connected" else "")
+            system_time = datetime.datetime.now(datetime.timezone.utc)
+            self.system_time_label.config(text=f"System Time (UTC): {system_time.strftime('%Y-%m-%d %H:%M:%S')}")
             self.seconds_offset_label.config(text=f"Seconds Offset: {backend_state['seconds_offset']} sec" if backend_state['connection_status'] == "Connected" else "")
+            system_time_with_offset = system_time + datetime.timedelta(seconds=backend_state['seconds_offset'])
+            self.in_sim_time_label.config(text=f"In-Sim Time: {system_time_with_offset.strftime('%Y-%m-%d %H:%M:%S')}" if backend_state['connection_status'] == "Connected" else "")
             
             while backend_state['logs']:
                 self.log_to_console(backend_state['logs'].pop(0))
@@ -84,7 +96,7 @@ class SimAdjusterUI:
 
     def save_window_position(self):
         config = {
-            "geometry": self.root.geometry(),
+            "geometry": "+" + str.split(self.root.geometry(), "+", maxsplit=1)[1],
             "console_visible": self.console_visible,
             "auto_scroll": self.auto_scroll.get()
         }
@@ -101,7 +113,7 @@ class SimAdjusterUI:
                     self.toggle_console()
                 self.auto_scroll.set(config.get("auto_scroll", True))
         except (FileNotFoundError, json.JSONDecodeError):
-            self.root.geometry(self.DEFAULT_GEOMETRY)
+            pass
             
     def on_exit(self):
             self.save_window_position()

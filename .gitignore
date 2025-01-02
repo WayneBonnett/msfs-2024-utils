@@ -162,3 +162,4 @@ cython_debug/
 /check_airports/.vscode
 /check_airports/config.json
 .vscode/launch.json
+config.json
