@@ -1,13 +1,19 @@
+import json
+import os
 import tkinter as tk
 from tkinter import ttk, scrolledtext
 from threading import Thread
 from sim_time_rate_adjuster_procmem import main, backend_state, state_lock, VERSION
 
 class SimAdjusterUI:
+    # config file under appdata
+    CONFIG_FILE = "config.json"
+    DEFAULT_GEOMETRY = "400x125"
+    
     def __init__(self, root):
         self.root = root
         self.root.title(f"Sim Time Rate Adjuster v{VERSION}")
-
+        
         # --- Connection Status ---
         self.connection_status_label = ttk.Label(root, text="Connection Status: Disconnected", foreground="red")
         self.connection_status_label.grid(row=0, column=0, sticky="w", padx=10, pady=5)
@@ -33,12 +39,18 @@ class SimAdjusterUI:
 
         self.console_visible = False
 
+        # Restore window geometry from config file
+        self.restore_window_position()
+
         # --- Start Backend Thread ---
         self.backend_thread = Thread(target=main, daemon=True)
         self.backend_thread.start()
 
         # --- Start UI Update Loop ---
         self.update_ui()
+
+        # --- Save window position on exit ----
+        self.root.protocol("WM_DELETE_WINDOW", self.on_exit)
 
     def toggle_console(self):
         if self.console_visible:
@@ -70,7 +82,31 @@ class SimAdjusterUI:
 
         self.root.after(1000, self.update_ui)  # Update every 1 second
 
+    def save_window_position(self):
+        config = {
+            "geometry": self.root.geometry(),
+            "console_visible": self.console_visible,
+            "auto_scroll": self.auto_scroll.get()
+        }
+        with open(self.CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(config, f)
 
+    def restore_window_position(self):
+        try:
+            with open(self.CONFIG_FILE, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                self.root.geometry(config.get("geometry", self.DEFAULT_GEOMETRY))
+                console_visible = config.get("console_visible", False)
+                if console_visible:
+                    self.toggle_console()
+                self.auto_scroll.set(config.get("auto_scroll", True))
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.root.geometry(self.DEFAULT_GEOMETRY)
+            
+    def on_exit(self):
+            self.save_window_position()
+            self.root.destroy()
+            
 if __name__ == "__main__":
     root = tk.Tk()
     app = SimAdjusterUI(root)

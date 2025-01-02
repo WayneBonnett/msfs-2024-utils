@@ -131,6 +131,7 @@ def main(invoked_from_ui=False):
     log(f"Base address: 0x{base_address:X}")
 
     seconds_offset_address = 0x0
+    seconds_offset = 0.0
 
     while seconds_offset_address == 0x0:
         if TRY_HARDCODED_OFFSETS_FIRST:
@@ -257,6 +258,7 @@ def main(invoked_from_ui=False):
     log("Monitoring for sim rate and pause state changes...")
 
     update_state("connection_status", "Connected")
+    update_state("seconds_offset", int(seconds_offset))
 
     aircraft_requests = AircraftRequests(simconnect, _time=0)
 
@@ -288,7 +290,7 @@ def main(invoked_from_ui=False):
                         cur_sim_rate = sim_rate
             if cur_sim_rate != last_sim_rate:
                 log(f"Current simulation rate: {cur_sim_rate}")
-                update_state("simulation_rate", f"{cur_sim_rate}x")
+                update_state("simulation_rate", f"{cur_sim_rate}")
             seconds_elapsed_this_time_adjusted_for_sim_rate = seconds_elapsed_this_time * cur_sim_rate
             
             seconds_elapsed += seconds_elapsed_this_time
@@ -303,6 +305,9 @@ def main(invoked_from_ui=False):
                 pm.write_float(seconds_offset_address, new_seconds_offset)
                 log(f"Setting new seconds offset: {int(new_seconds_offset)}")
                 update_state("seconds_offset", int(new_seconds_offset))
+            else:
+                seconds_offset = pm.read_float(seconds_offset_address)
+                update_state("seconds_offset", int(seconds_offset))
     except KeyboardInterrupt:
         log("Exiting...")
         sys.exit(0)
