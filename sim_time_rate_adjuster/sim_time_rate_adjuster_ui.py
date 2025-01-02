@@ -18,25 +18,36 @@ class SimAdjusterUI:
         # --- Connection Status ---
         self.connection_status_label = ttk.Label(root, text="Connection Status: Disconnected", foreground="red")
         self.connection_status_label.grid(row=0, column=0, sticky="w", padx=10, pady=5)
+        
+        # --- SimConnect Status ---
+        self.simconnect_status_label = ttk.Label(root, text="SimConnect Status: N/A")
+        self.simconnect_status_label.grid(row=1, column=0, sticky="w", padx=10, pady=5)
 
         # --- Time Labels ---
         self.system_time_label = ttk.Label(root, text="System Time: N/A")
-        self.system_time_label.grid(row=1, column=0, sticky="w", padx=10, pady=5)
+        self.system_time_label.grid(row=2, column=0, sticky="w", padx=10, pady=5)
                 
         self.in_sim_time_label = ttk.Label(root, text="In-Sim Time: N/A")
-        self.in_sim_time_label.grid(row=2, column=0, sticky="w", padx=10, pady=5)
+        self.in_sim_time_label.grid(row=3, column=0, sticky="w", padx=10, pady=5)
         
         # --- Simulation Rate ---
         self.sim_rate_label = ttk.Label(root, text="Simulation Rate: N/A")
-        self.sim_rate_label.grid(row=3, column=0, sticky="w", padx=10, pady=5)
+        self.sim_rate_label.grid(row=4, column=0, sticky="w", padx=10, pady=5)
 
         # --- Seconds Offset ---
         self.seconds_offset_label = ttk.Label(root, text="Seconds Offset: N/A")
-        self.seconds_offset_label.grid(row=4, column=0, sticky="w", padx=10, pady=5)
+        self.seconds_offset_label.grid(row=5, column=0, sticky="w", padx=10, pady=5)
 
         # --- Expandable Output Console ---
         self.expand_button = ttk.Button(root, text="Expand Console", command=self.toggle_console)
-        self.expand_button.grid(row=5, column=0, sticky="w", padx=10, pady=5)
+        self.expand_button.grid(row=6, column=0, sticky="w", padx=10, pady=5)
+        
+        # -- Force Pause / Resume Buttons --
+        self.force_pause_button = ttk.Button(root, text="Force Pause", command=lambda: self.force_state_change("pause"))
+        self.force_pause_button.grid(row=6, column=1, sticky="w", padx=10, pady=5)
+        
+        self.force_resume_button = ttk.Button(root, text="Force Resume", command=lambda: self.force_state_change("resume"))
+        self.force_resume_button.grid(row=6, column=2, sticky="w", padx=10, pady=5)
 
         self.console_frame = ttk.Frame(root)
         self.console_text = scrolledtext.ScrolledText(self.console_frame, wrap=tk.WORD, height=10, state='disabled')
@@ -59,13 +70,17 @@ class SimAdjusterUI:
 
         # --- Save window position on exit ----
         self.root.protocol("WM_DELETE_WINDOW", self.on_exit)
+        
+    def force_state_change(self, state):
+        with state_lock:
+            backend_state['force_state_change'] = state
 
     def toggle_console(self):
         if self.console_visible:
             self.console_frame.grid_forget()
             self.expand_button.config(text="Expand Console")
         else:
-            self.console_frame.grid(row=4, column=0, columnspan=2, sticky="nsew", padx=10, pady=5)
+            self.console_frame.grid(row=7, column=0, columnspan=3, sticky="nsew", padx=10, pady=5)
             self.expand_button.config(text="Collapse Console")
         self.console_visible = not self.console_visible
 
@@ -82,7 +97,8 @@ class SimAdjusterUI:
                 text=f"Connection Status: {backend_state['connection_status']}",
                 foreground="green" if backend_state['connection_status'] == "Connected" else "red"
             )
-            self.sim_rate_label.config(text=f"Simulation Rate: {backend_state['simulation_rate']}x" if backend_state['connection_status'] == "Connected" else "")
+            self.simconnect_status_label.config(text=f"SimConnect Status: {backend_state['simconnect_status']}" if backend_state['connection_status'] == "Connected" else "SimConnect Status: Please wait...")
+            self.sim_rate_label.config(text=f"Simulation Rate: {backend_state['simulation_rate']}" if backend_state['connection_status'] == "Connected" else "")
             system_time = datetime.datetime.now(datetime.timezone.utc)
             self.system_time_label.config(text=f"System Time (UTC): {system_time.strftime('%Y-%m-%d %H:%M:%S')}")
             self.seconds_offset_label.config(text=f"Seconds Offset: {backend_state['seconds_offset']} sec" if backend_state['connection_status'] == "Connected" else "")

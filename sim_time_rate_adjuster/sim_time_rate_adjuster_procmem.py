@@ -1,5 +1,6 @@
 ''' A script that watches for changes in the simulation rate, and adjusts the simulation time accordingly. '''
 
+import logging
 import os
 import re
 import struct
@@ -10,14 +11,16 @@ from time import sleep, time
 import pymem
 from SimConnect import SimConnect, AircraftRequests, AircraftEvents
 
-VERSION = "0.2"
+VERSION = "0.2.1"
 
 # Shared State Object
 backend_state = {
     "connection_status": "Disconnected",
+    "simconnect_status": "",
     "simulation_rate": 1.0,
     "seconds_offset": 0,
-    "logs": []
+    "logs": [],
+    "force_state_change": None
 }
 state_lock = threading.Lock()
 
@@ -70,6 +73,8 @@ def verify_seconds_offset_address(seconds_offset_address, pm, aircraft_events):
     return True
 
 def main(invoked_from_ui=False):
+    logging.basicConfig(level=logging.INFO)
+    
     # Get the base module address for FlightSimulator2024.exe
     pm = None
     printed_waiting_to_start = False
@@ -186,12 +191,15 @@ def main(invoked_from_ui=False):
 
                 # Scan the process memory for that address
                 log("Scanning process memory for the address...")
-                found_addresses = pm.pattern_scan_all(re.escape(final_address.to_bytes(8, "little")), return_multiple=True)
+                try:
+                    found_addresses = pm.pattern_scan_all(re.escape(final_address.to_bytes(8, "little")), return_multiple=True)
+                except pymem.exception.WinAPIError:
+                    found_addresses = []
                 
-                # This will return a list of addresses where the pattern was found
-                for address in found_addresses:
-                    log(f"Found at: {address:X}")
-                log()
+                if found_addresses:
+                    for address in found_addresses:
+                        log(f"Found at: {address:X}")
+                    log()
                     
                 # Find the two instances that are 0x20 apart
                 for i in range(len(found_addresses) - 1):
@@ -225,28 +233,32 @@ def main(invoked_from_ui=False):
                 found_addresses = pm.pattern_scan_all(regex_pattern, return_multiple=True)
             except pymem.exception.WinAPIError:
                 pass
-            clock_minutes_dec_event(1)
-            sleep(SLEEP_TIME_AFTER_SIMCONNECT_EVENT)
-            # Check which of the found addresses now contain a float -120
-            for address in found_addresses:
-                try:
-                    if pm.read_float(address) == -120:
-                        # Let's double confirm by incrementing twice and checking that the value changes to -60 and 0 each time
-                        clock_minutes_inc_event(1)
-                        sleep(SLEEP_TIME_AFTER_SIMCONNECT_EVENT)
-                        if pm.read_float(address) != -60:
-                            continue
-                        clock_minutes_inc_event(1)
-                        sleep(SLEEP_TIME_AFTER_SIMCONNECT_EVENT)
-                        if pm.read_float(address) != 0:
-                            continue
-                        seconds_offset_address = address
-                        log(f"Seconds offset address: 0x{seconds_offset_address:X}")
-                        seconds_offset = pm.read_float(seconds_offset_address)
-                        log(f"Current seconds offset: {int(seconds_offset)}")
-                        break
-                except pymem.exception.MemoryReadError:
-                    continue
+            if found_addresses:
+                clock_minutes_dec_event(1)
+                sleep(SLEEP_TIME_AFTER_SIMCONNECT_EVENT)
+                # Check which of the found addresses now contain a float -120
+                for address in found_addresses:
+                    try:
+                        if pm.read_float(address) == -120:
+                            # Let's double confirm by incrementing twice and checking that the value changes to -60 and 0 each time
+                            clock_minutes_inc_event(1)
+                            sleep(SLEEP_TIME_AFTER_SIMCONNECT_EVENT)
+                            if pm.read_float(address) != -60:
+                                continue
+                            clock_minutes_inc_event(1)
+                            sleep(SLEEP_TIME_AFTER_SIMCONNECT_EVENT)
+                            if pm.read_float(address) != 0:
+                                continue
+                            seconds_offset_address = address
+                            log(f"Seconds offset address: 0x{seconds_offset_address:X}")
+                            seconds_offset = pm.read_float(seconds_offset_address)
+                            log(f"Current seconds offset: {int(seconds_offset)}")
+                            break
+                    except pymem.exception.MemoryReadError:
+                        continue
+            else:
+                clock_minutes_inc_event(1)
+                sleep(SLEEP_TIME_AFTER_SIMCONNECT_EVENT)
         
         if seconds_offset_address == 0x0:
             log()
@@ -257,8 +269,9 @@ def main(invoked_from_ui=False):
     log("Initialization complete.")
     log("Monitoring for sim rate and pause state changes...")
 
-    update_state("connection_status", "Connected")
     update_state("seconds_offset", int(seconds_offset))
+    update_state("simconnect_status", f"OK: {simconnect.ok} - Paused: {simconnect.paused}")
+    update_state("connection_status", "Connected")
 
     aircraft_requests = AircraftRequests(simconnect, _time=0)
 
@@ -273,24 +286,42 @@ def main(invoked_from_ui=False):
             sleep(REFRESH_INTERVAL)
             #log("=====================================")
                 
+            force_state_change = None
+            with state_lock:
+                force_state_change = backend_state["force_state_change"]
+            
+            if force_state_change is not None:
+                if force_state_change == "pause":
+                    log("Forcing pause...")
+                    simconnect.paused = True
+                elif force_state_change == "resume":
+                    log("Forcing resume...")
+                    simconnect.paused = False
+                update_state("force_state_change", None)
+                
             new_time = time()
             seconds_elapsed_this_time = new_time - last_irl_time
             last_irl_time = new_time
             
+            update_state("simconnect_status", f"OK: {simconnect.ok} - Paused: {simconnect.paused}")
+            
             last_sim_rate = cur_sim_rate
+            additional_state = ""
             if simconnect.paused:
                 cur_sim_rate = 0.0
+                additional_state = " (Paused)"
             else:
                 is_slew_active = aircraft_requests.get("IS_SLEW_ACTIVE")
                 if is_slew_active is not None and is_slew_active:
                     cur_sim_rate = 0.0
+                    additional_state = " (Slew Mode Active)"
                 else:
                     sim_rate = aircraft_requests.get("SIMULATION_RATE")
                     if sim_rate is not None:
                         cur_sim_rate = sim_rate
             if cur_sim_rate != last_sim_rate:
-                log(f"Current simulation rate: {cur_sim_rate}")
-                update_state("simulation_rate", f"{cur_sim_rate}")
+                log(f"Current simulation rate: {cur_sim_rate}x{additional_state}")
+                update_state("simulation_rate", f"{cur_sim_rate}x{additional_state}")
             seconds_elapsed_this_time_adjusted_for_sim_rate = seconds_elapsed_this_time * cur_sim_rate
             
             seconds_elapsed += seconds_elapsed_this_time
