@@ -8,14 +8,16 @@ from time import sleep, time
 import pymem
 from SimConnect import SimConnect, AircraftRequests, AircraftEvents
 
-version = "0.1"
+version = "0.1.1"
 
+print("=====================================")
 print(f"MSFS2024 Sim Time Rate Adjuster v{version}")
 print("=====================================")
 
 # Hardcoded offset that stores the seconds offset from the real world time.
 # This is quite likely to break in future MSFS updates.
-offset = 0x76f7728
+HARDCODED_OFFSETS = [ 0x76f7728, 0x79670b8 ]
+TRY_HARDCODED_OFFSETS_FIRST = True
 
 # Get the base module address for FlightSimulator2024.exe
 pm = None
@@ -57,33 +59,77 @@ if not simconnect.ok:
         sleep(1)
                 
 print(f"Base address: 0x{base_address:X}")
-print(f"Offset: 0x{offset:X}")
-final_address = base_address + offset
-print(f"Final address: 0x{final_address:X}")
-
-# Scan the process memory for that address
-print("Scanning process memory for the address...")
-found_addresses = pm.pattern_scan_all(re.escape(final_address.to_bytes(8, "little")), return_multiple=True)
-# This will return a list of addresses where the pattern was found
-for address in found_addresses:
-    print(f"Found at: {address:X}")
-print()
 
 seconds_offset_address = 0x0
     
-# Find the two instances that are 0x20 apart
-for i in range(len(found_addresses) - 1):
-    if found_addresses[i + 1] - found_addresses[i] == 0x20:
-        print(f"Found base combo at: 0x{found_addresses[i]:X} and 0x{found_addresses[i + 1]:X}")
-        seconds_offset_address = found_addresses[i+1] + 0x34
-        print(f"Seconds offset address: 0x{seconds_offset_address:X}")
-        seconds_offset = pm.read_float(seconds_offset_address)
-        print(f"Current seconds offset: {int(seconds_offset)}")
-        break
+while seconds_offset_address == 0x0:
+    if TRY_HARDCODED_OFFSETS_FIRST:
+        for offset in HARDCODED_OFFSETS:
+            print()
+            print(f"Trying offset: 0x{offset:X}")
+            final_address = base_address + offset
+            print(f"Final address: 0x{final_address:X}")
 
-if seconds_offset_address == 0x0:
-    print("Could not find the seconds offset address.")
-    sys.exit(-1)
+            # Scan the process memory for that address
+            print("Scanning process memory for the address...")
+            try:
+                found_addresses = pm.pattern_scan_all(re.escape(final_address.to_bytes(8, "little")), return_multiple=True)
+            except pymem.exception.WinAPIError:
+                continue
+            
+            # This will return a list of addresses where the pattern was found
+            for address in found_addresses:
+                print(f"Found at: {address:X}")
+            print()
+                
+            # Find the two instances that are 0x20 apart
+            for i in range(len(found_addresses) - 1):
+                if found_addresses[i + 1] - found_addresses[i] == 0x20:
+                    print(f"Found base combo at: 0x{found_addresses[i]:X} and 0x{found_addresses[i + 1]:X}")
+                    seconds_offset_address = found_addresses[i+1] + 0x34
+                    print(f"Seconds offset address: 0x{seconds_offset_address:X}")
+                    seconds_offset = pm.read_float(seconds_offset_address)
+                    print(f"Current seconds offset: {int(seconds_offset)}")
+                    break
+            if seconds_offset_address != 0x0:
+                break
+
+    if seconds_offset_address == 0x0:
+        # read the entire FlightSimulator2024.exe module memory
+        print()
+        print("Searching for the magic string in the module memory...")
+        module_memory = pm.read_bytes(base_address, pm.process_base.SizeOfImage)
+        lookup_string = br'Weather\Presets'
+        offset = module_memory.find(lookup_string)
+        if offset != -1:
+            offset -= 8
+            print(f"Trying offset: 0x{offset:X}")
+            final_address = base_address + offset
+            print(f"Final address: 0x{final_address:X}")
+
+            # Scan the process memory for that address
+            print("Scanning process memory for the address...")
+            found_addresses = pm.pattern_scan_all(re.escape(final_address.to_bytes(8, "little")), return_multiple=True)
+            
+            # This will return a list of addresses where the pattern was found
+            for address in found_addresses:
+                print(f"Found at: {address:X}")
+            print()
+                
+            # Find the two instances that are 0x20 apart
+            for i in range(len(found_addresses) - 1):
+                if found_addresses[i + 1] - found_addresses[i] == 0x20:
+                    print(f"Found base combo at: 0x{found_addresses[i]:X} and 0x{found_addresses[i + 1]:X}")
+                    seconds_offset_address = found_addresses[i+1] + 0x34
+                    print(f"Seconds offset address: 0x{seconds_offset_address:X}")
+                    seconds_offset = pm.read_float(seconds_offset_address)
+                    print(f"Current seconds offset: {int(seconds_offset)}")
+                    break
+    
+    if seconds_offset_address == 0x0:
+        print()
+        print("Could not find the seconds offset address. Retrying after 5 seconds...")
+        sleep(5)
     
 print("=====================================")
 print("Initialization complete.")
