@@ -4,16 +4,35 @@ import os
 import re
 import struct
 import sys
+import threading
 from time import sleep, time
 
 import pymem
 from SimConnect import SimConnect, AircraftRequests, AircraftEvents
 
-version = "0.1.2"
+VERSION = "0.2"
 
-print("=====================================")
-print(f"MSFS2024 Sim Time Rate Adjuster v{version}")
-print("=====================================")
+# Shared State Object
+backend_state = {
+    "connection_status": "Disconnected",
+    "simulation_rate": 1.0,
+    "seconds_offset": 0,
+    "logs": []
+}
+state_lock = threading.Lock()
+
+def update_state(key, value):
+    with state_lock:
+        backend_state[key] = value
+
+def log(message=""):
+    with state_lock:
+        backend_state["logs"].append(message)
+    print(message)  # Keep console logging as well
+
+log("=====================================")
+log(f"MSFS2024 Sim Time Rate Adjuster v{VERSION}")
+log("=====================================")
 
 # Hardcoded offset that stores the seconds offset from the real world time.
 # This is quite likely to break in future MSFS updates.
@@ -50,42 +69,46 @@ def verify_seconds_offset_address(seconds_offset_address, pm, aircraft_events):
         return False
     return True
 
-def main():
+def main(invoked_from_ui=False):
     # Get the base module address for FlightSimulator2024.exe
     pm = None
     printed_waiting_to_start = False
+    update_state("connection_status", "Waiting for FlightSimulator2024.exe to start...")
     while True:
         try:
             pm = pymem.Pymem("FlightSimulator2024.exe")
             break
         except pymem.exception.ProcessNotFound:
             if not printed_waiting_to_start:
-                print("Waiting for FlightSimulator2024.exe to start...")
+                log("Waiting for FlightSimulator2024.exe to start...")
                 printed_waiting_to_start = True
         except pymem.exception.CouldNotOpenProcess:
-            print("Could not open FlightSimulator2024.exe process.")
-            print("The script needs to run on the same level of elevation as MSFS 2024 itself.")
-            print("If you're running the game as admin, you'll need to run this script as admin as well.")
-            os.system("pause")
+            log("Could not open FlightSimulator2024.exe process.")
+            log("The script needs to run on the same level of elevation as MSFS 2024 itself.")
+            log("If you're running the game as admin, you'll need to run this script as admin as well.")
+            if not invoked_from_ui:
+                os.system("pause")
+                sys.exit(1)
         sleep(1)
 
     base_address = pm.base_address
 
     simconnect = None
     printed_waiting_for_simconnect = False
+    update_state("connection_status", "Waiting for SimConnect...")
     while True:
         try:
             simconnect = SimConnect()
             break
         except ConnectionError:
             if not printed_waiting_for_simconnect:
-                print("Waiting for SimConnect...")
+                log("Waiting for SimConnect...")
                 printed_waiting_for_simconnect = True
         sleep(1)
 
     if not simconnect.ok:
         if not printed_waiting_for_simconnect:
-            print("Waiting for SimConnect...")
+            log("Waiting for SimConnect...")
             printed_waiting_for_simconnect = True
         while not simconnect.ok:
             sleep(1)
@@ -93,27 +116,32 @@ def main():
     if printed_waiting_for_simconnect:
         num_seconds_to_wait = 15
         while num_seconds_to_wait > 0:
-            print(f"\rWaiting for things to settle down... {num_seconds_to_wait} seconds remaining...         ", end="")
+            if not invoked_from_ui:
+                print(f"\rWaiting for things to settle down... {num_seconds_to_wait: 2} seconds remaining...", end="")
+            else:
+                log(f"Waiting for things to settle down... {num_seconds_to_wait} seconds remaining...")
             sleep(1)
             num_seconds_to_wait -= 1
-        print()
+        log()
 
+    update_state("connection_status", "Scanning...")
+    
     aircraft_events = AircraftEvents(simconnect)
 
-    print(f"Base address: 0x{base_address:X}")
+    log(f"Base address: 0x{base_address:X}")
 
     seconds_offset_address = 0x0
 
     while seconds_offset_address == 0x0:
         if TRY_HARDCODED_OFFSETS_FIRST:
             for offset in HARDCODED_OFFSETS:
-                print()
-                print(f"Trying offset: 0x{offset:X}")
+                log()
+                log(f"Trying offset: 0x{offset:X}")
                 final_address = base_address + offset
-                print(f"Final address: 0x{final_address:X}")
+                log(f"Final address: 0x{final_address:X}")
 
                 # Scan the process memory for that address
-                print("Scanning process memory for the address...")
+                log("Scanning process memory for the address...")
                 try:
                     found_addresses = pm.pattern_scan_all(re.escape(final_address.to_bytes(8, "little")), return_multiple=True)
                 except pymem.exception.WinAPIError:
@@ -121,70 +149,70 @@ def main():
                 
                 # This will return a list of addresses where the pattern was found
                 for address in found_addresses:
-                    print(f"Found at: {address:X}")
-                print()
+                    log(f"Found at: {address:X}")
+                log()
                     
                 # Find the two instances that are 0x20 apart
                 for i in range(len(found_addresses) - 1):
                     if found_addresses[i + 1] - found_addresses[i] == POINTER_TO_WEATHER_STRUCT_SPACING:
-                        print(f"Found base combo at: 0x{found_addresses[i]:X} and 0x{found_addresses[i + 1]:X}")
+                        log(f"Found base combo at: 0x{found_addresses[i]:X} and 0x{found_addresses[i + 1]:X}")
                         potential_seconds_offset_address = found_addresses[i+1] + SECONDS_OFFSET_VALUE_OFFSET_FROM_SECOND_POINTER
                         if verify_seconds_offset_address(potential_seconds_offset_address, pm, aircraft_events):
-                            print("Verification successful")
+                            log("Verification successful")
                             seconds_offset_address = potential_seconds_offset_address
                         else:
-                            print("Verification failed")
+                            log("Verification failed")
                             continue
-                        print(f"Seconds offset address: 0x{seconds_offset_address:X}")
+                        log(f"Seconds offset address: 0x{seconds_offset_address:X}")
                         seconds_offset = pm.read_float(seconds_offset_address)
-                        print(f"Current seconds offset: {int(seconds_offset)}")
+                        log(f"Current seconds offset: {int(seconds_offset)}")
                         break
                 if seconds_offset_address != 0x0:
                     break
 
         if seconds_offset_address == 0x0:
             # read the entire FlightSimulator2024.exe module memory
-            print()
-            print("Searching for the magic string in the module memory...")
+            log()
+            log("Searching for the magic string in the module memory...")
             module_memory = pm.read_bytes(base_address, pm.process_base.SizeOfImage)
             lookup_string = br'Weather\Presets'
             offset = module_memory.find(lookup_string)
             if offset != -1:
                 offset -= 8
-                print(f"Trying offset: 0x{offset:X}")
+                log(f"Trying offset: 0x{offset:X}")
                 final_address = base_address + offset
-                print(f"Final address: 0x{final_address:X}")
+                log(f"Final address: 0x{final_address:X}")
 
                 # Scan the process memory for that address
-                print("Scanning process memory for the address...")
+                log("Scanning process memory for the address...")
                 found_addresses = pm.pattern_scan_all(re.escape(final_address.to_bytes(8, "little")), return_multiple=True)
                 
                 # This will return a list of addresses where the pattern was found
                 for address in found_addresses:
-                    print(f"Found at: {address:X}")
-                print()
+                    log(f"Found at: {address:X}")
+                log()
                     
                 # Find the two instances that are 0x20 apart
                 for i in range(len(found_addresses) - 1):
                     if found_addresses[i + 1] - found_addresses[i] == POINTER_TO_WEATHER_STRUCT_SPACING:
-                        print(f"Found base combo at: 0x{found_addresses[i]:X} and 0x{found_addresses[i + 1]:X}")
+                        log(f"Found base combo at: 0x{found_addresses[i]:X} and 0x{found_addresses[i + 1]:X}")
                         potential_seconds_offset_address = found_addresses[i+1] + SECONDS_OFFSET_VALUE_OFFSET_FROM_SECOND_POINTER
                         if verify_seconds_offset_address(potential_seconds_offset_address, pm, aircraft_events):
-                            print("Verification successful")
+                            log("Verification successful")
                             seconds_offset_address = potential_seconds_offset_address
                         else:
-                            print("Verification failed")
+                            log("Verification failed")
                             continue
-                        print(f"Seconds offset address: 0x{seconds_offset_address:X}")
+                        log(f"Seconds offset address: 0x{seconds_offset_address:X}")
                         seconds_offset = pm.read_float(seconds_offset_address)
-                        print(f"Current seconds offset: {int(seconds_offset)}")
+                        log(f"Current seconds offset: {int(seconds_offset)}")
                         break
         
         if seconds_offset_address == 0x0:
-            print()
-            print("Could not find the seconds offset address using quick methods, attempting to detect offset via events.")
-            print("This requires you to be currently using real time in-sim, otherwise this method will fail.")
-            print("Please wait...")
+            log()
+            log("Could not find the seconds offset address using quick methods, attempting to detect offset via events.")
+            log("This requires you to be currently using real time in-sim, otherwise this method will fail.")
+            log("Please wait...")
             clock_minutes_dec_event = aircraft_events.find("CLOCK_MINUTES_DEC")
             clock_minutes_inc_event = aircraft_events.find("CLOCK_MINUTES_INC")
             clock_minutes_dec_event(1)
@@ -212,21 +240,23 @@ def main():
                         if pm.read_float(address) != 0:
                             continue
                         seconds_offset_address = address
-                        print(f"Seconds offset address: 0x{seconds_offset_address:X}")
+                        log(f"Seconds offset address: 0x{seconds_offset_address:X}")
                         seconds_offset = pm.read_float(seconds_offset_address)
-                        print(f"Current seconds offset: {int(seconds_offset)}")
+                        log(f"Current seconds offset: {int(seconds_offset)}")
                         break
                 except pymem.exception.MemoryReadError:
                     continue
         
         if seconds_offset_address == 0x0:
-            print()
-            print("Could not find the seconds offset address. Retrying after 5 seconds...")
+            log()
+            log("Could not find the seconds offset address. Retrying after 5 seconds...")
             sleep(5)
         
-    print("=====================================")
-    print("Initialization complete.")
-    print("Monitoring for sim rate and pause state changes...")
+    log("=====================================")
+    log("Initialization complete.")
+    log("Monitoring for sim rate and pause state changes...")
+
+    update_state("connection_status", "Connected")
 
     aircraft_requests = AircraftRequests(simconnect, _time=0)
 
@@ -239,7 +269,7 @@ def main():
     try:
         while True:
             sleep(REFRESH_INTERVAL)
-            #print("=====================================")
+            #log("=====================================")
                 
             new_time = time()
             seconds_elapsed_this_time = new_time - last_irl_time
@@ -257,7 +287,8 @@ def main():
                     if sim_rate is not None:
                         cur_sim_rate = sim_rate
             if cur_sim_rate != last_sim_rate:
-                print(f"Current simulation rate: {cur_sim_rate}")
+                log(f"Current simulation rate: {cur_sim_rate}")
+                update_state("simulation_rate", f"{cur_sim_rate}x")
             seconds_elapsed_this_time_adjusted_for_sim_rate = seconds_elapsed_this_time * cur_sim_rate
             
             seconds_elapsed += seconds_elapsed_this_time
@@ -270,19 +301,29 @@ def main():
                 seconds_offset = pm.read_float(seconds_offset_address)
                 new_seconds_offset = seconds_offset + diff_int
                 pm.write_float(seconds_offset_address, new_seconds_offset)
-                print(f"Setting new seconds offset: {int(new_seconds_offset)}")
+                log(f"Setting new seconds offset: {int(new_seconds_offset)}")
+                update_state("seconds_offset", int(new_seconds_offset))
     except KeyboardInterrupt:
-        print("Exiting...")
+        log("Exiting...")
         sys.exit(0)
     except OSError:
-        print("MSFS process likely exited. Exiting...")
-        sys.exit(0)
+        log("MSFS process likely exited.")
+        update_state("connection_status", "Disconnected")
+        if not invoked_from_ui:
+            print("Exiting...")
+            sys.exit(0)
     except pymem.exception.MemoryReadError:
-        print("Memory read error. MSFS process likely exited. Exiting...")
-        sys.exit(0)
+        log("Memory read error. MSFS process likely exited.")
+        update_state("connection_status", "Disconnected")
+        if not invoked_from_ui:
+            print("Exiting...")
+            sys.exit(0)
     except pymem.exception.MemoryWriteError:
-        print("Memory write error. MSFS process likely exited. Exiting...")
-        sys.exit(0)
+        log("Memory write error. MSFS process likely exited.")
+        update_state("connection_status", "Disconnected")
+        if not invoked_from_ui:
+            print("Exiting...")
+            sys.exit(0)
 
 if __name__ == "__main__":
     main()
