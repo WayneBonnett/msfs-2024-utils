@@ -44,12 +44,13 @@ class AirportCheckerUI:
         tk.Radiobutton(root, text="Check For Missing Overrides", variable=self.mode_var, value="check").grid(row=2, column=1, padx=5, pady=0, sticky="w")
         tk.Radiobutton(root, text="Add Overrides: Links (Recommended)", variable=self.mode_var, value="autolink").grid(row=3, column=1, padx=5, pady=0, sticky="w")
         tk.Radiobutton(root, text="Add Overrides: Empty Folders", variable=self.mode_var, value="autofix").grid(row=4, column=1, padx=5, pady=0, sticky="w")
-        tk.Radiobutton(root, text="Remove Overrides", variable=self.mode_var, value="delete").grid(row=5, column=1, padx=5, pady=0, sticky="w")
+        tk.Radiobutton(root, text="Add Overrides: Disable in Content.xml", variable=self.mode_var, value="autodisable").grid(row=5, column=1, padx=5, pady=0, sticky="w")
+        tk.Radiobutton(root, text="Remove non-Content.xml Overrides", variable=self.mode_var, value="delete").grid(row=6, column=1, padx=5, pady=0, sticky="w")
         
         # Run Button
         self.run_button = tk.Button(root, text="Run", command=self.run_check)
-        self.run_button.grid(row=6, column=0, padx=5, pady=10, sticky="w")
-        tk.Button(root, text="Save Log", command=self.save_log).grid(row=6, column=2, padx=5, pady=10)
+        self.run_button.grid(row=7, column=0, padx=5, pady=10, sticky="w")
+        tk.Button(root, text="Save Log", command=self.save_log).grid(row=7, column=2, padx=5, pady=10)
         
         # Output Area
         self.output_area = scrolledtext.ScrolledText(root, width=70, height=20, wrap=tk.WORD)
@@ -57,8 +58,8 @@ class AirportCheckerUI:
         # make it read-only
         self.output_area.bind("<Key>", lambda e: "break")
         # make the output area's size span the rest of the window
-        self.output_area.grid(row=7, column=0, columnspan=3, padx=5, pady=5, sticky="nsew")
-        root.grid_rowconfigure(7, weight=1)
+        self.output_area.grid(row=8, column=0, columnspan=3, padx=5, pady=5, sticky="nsew")
+        root.grid_rowconfigure(8, weight=1)
         root.grid_columnconfigure(0, weight=1)
         self.output_area.grid_propagate(False)
         
@@ -147,6 +148,8 @@ class AirportCheckerUI:
                     sys.argv.append("--autofix")
                 elif mode == "autolink":
                     sys.argv.append("--autolink")
+                elif mode == "autodisable":
+                    sys.argv.append("--autodisable")
                 elif mode == "delete":
                     sys.argv.append("--delete")
                 sys.argv.extend(["--community", community_folder, "--streamedpackages", streamed_folder])

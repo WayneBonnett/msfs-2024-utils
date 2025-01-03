@@ -3,11 +3,13 @@
 # the "content" field, which is going to be the airport's ICAO code.
 # Then, look for any subfolder in the root streamed packages folder that contiains that ICAO code in its name.
 # Make sure that a subfolder with the same name exists in the root community folder. Report if there is or not.
-version = '0.4.3'
+version = '0.5'
 
 import argparse
-import os
+import datetime
 import json
+import os
+import shutil
 import sys
 
 def os_walk_long_path(root_path):
@@ -39,7 +41,7 @@ def redirect_print(output_func=None):
 def find_airports_in_community_folder(root_folder, verbose):
     airports = {}
     for root, dirs, files in os_walk_long_path(root_folder):
-        if '-gsx-' in root.lower() or '-asobo-' in root.lower() or '-microsoft-' in root.lower():
+        if '-gsx-' in root.lower() or '-asobo-' in root.lower() or '-microsoft-' in root.lower() or 'navigraph-' in root.lower():
             continue
         for file in files:
             if file.lower() == 'contenthistory.json':
@@ -62,18 +64,37 @@ def find_airport_in_streamed_packages_folder(root_folder, airport):
             return dir
     return None
 
+def get_content_xml_path(root_streamed_packages_folder):
+    return os.path.abspath(os.path.join(root_streamed_packages_folder, '..', '..', 'LocalCache', 'Content.xml'))
+
 # For any airports in the community folder that does have a streamed package equivalent, make sure the streamed
 # package folder also exists in the community folder.
 def check_airports_in_streamed_packages_folder(root_community_folder, root_streamed_packages_folder, report_existing, verbose):
     missing_streamed_package_overrides = {}
     existing_streamed_package_overrides = {}
+    
     print(f"PROGRESS: Finding airports in the community folder...")
     airports = find_airports_in_community_folder(root_community_folder, verbose)
+    
+    print("PROGRESS: Gathering activated packages from Content.xml...")
+    content_xml_path = get_content_xml_path(root_streamed_packages_folder)
+    activated_packages = []
+    with open(content_xml_path, 'r') as f:
+        lines = f.readlines()
+        for line in lines:
+            if '<Package name=' in line and 'active="Activated"' in line:
+                package_name = line.split('"')[1]
+                if not package_name.startswith("commounity"):
+                    activated_packages.append(package_name)
+    
     print(f"PROGRESS: Checking streamed package overrides in the community folder...")
     for airportICAO in airports.keys():
         streamed_package_folder = find_airport_in_streamed_packages_folder(root_streamed_packages_folder, airportICAO)
         if streamed_package_folder:
-            if not os.path.exists(os.path.join(root_community_folder, streamed_package_folder)):
+            if not any(x for x in activated_packages if x.endswith(streamed_package_folder)):
+                if verbose:
+                    print(f"INFO: Modded airport {airportICAO} has a streamed package ({streamed_package_folder}), but it is disabled.")
+            elif not os.path.exists(os.path.join(root_community_folder, streamed_package_folder)):
                 missing_streamed_package_overrides[streamed_package_folder] = airports[airportICAO]
                 if verbose:
                     print(f"WARNING: Modded airport {airportICAO} has a streamed package ({streamed_package_folder}), but no override in the community folder.")
@@ -122,12 +143,13 @@ def main():
     parser.add_argument('--verbose', action='store_true', help='Print verbose output.')
     parser.add_argument('--autofix', action='store_true', help='Automatically create missing streamed package overrides to the community folder as empty folders.')
     parser.add_argument('--autolink', action='store_true', help='Automatically create missing streamed package overrides to the community folder as links.')
+    parser.add_argument('--autodisable', action='store_true', help='Automatically create missing streamed package overrides by disabling them in Content.xml.')
     parser.add_argument('--delete', action='store_true', help='Delete all streamed package overrides in the community folder.')
     parser.add_argument('--noinput', action='store_true', help='Disable user input prompts.')
     args = parser.parse_args()
     
-    if int(args.autofix) + int(args.autolink) + int(args.delete) > 1:
-        print("ERROR: Only one of --autofix, --autolink, or --delete can be specified.")
+    if int(args.autofix) + int(args.autolink) + int(args.autodisable) + int(args.delete) > 1:
+        print("ERROR: Only one of --autofix, --autolink, --autodisable, or --delete can be specified.")
         print()
         parser.print_help()
         return
@@ -172,6 +194,12 @@ def main():
         print()
         print("SUMMARY")
         if streamed_package_overrides:
+            if args.autodisable:
+                # Backup the content.xml with a datetime in the backed up filename
+                content_xml_path = get_content_xml_path(root_streamed_packages_folder)
+                backup_filename = content_xml_path + datetime.datetime.now().strftime(".backup_%Y%m%d%H%M%S")
+                shutil.copy(content_xml_path, backup_filename)
+                print(f"INFO: Backed up Content.xml to {os.path.basename(backup_filename)}")
             print(f"WARNING: The following streamed package overrides are missing from the community folder:")
             for streamed_package in streamed_package_overrides.keys():
                 print(f"  {streamed_package}")
@@ -181,6 +209,16 @@ def main():
                 elif args.autofix:
                     print(f"    INFO: Creating empty folder override for {streamed_package} in the community folder.")
                     os.makedirs(os.path.join(root_community_folder, streamed_package))
+                elif args.autodisable:
+                    print(f"    INFO: Disabling streamed package {streamed_package} in Content.xml.")
+                    with open(content_xml_path, 'r') as f:
+                        lines = f.readlines()
+                    with open(content_xml_path, 'w') as f:
+                        for line in lines:
+                            if f'<Package name=' in line and line.split('"')[1].endswith(streamed_package):
+                                f.write(line.replace('active="Activated"', 'active="UserDisabled"'))
+                            else:
+                                f.write(line)
         else:
             print("INFO: All necessary streamed package overrides are present in the community folder.")
     if not args.noinput:
