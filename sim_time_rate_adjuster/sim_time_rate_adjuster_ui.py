@@ -1,8 +1,12 @@
 import datetime
 import json
 import os
+import sys
+import win32event
+import win32api
+import win32con
 import tkinter as tk
-from tkinter import ttk, scrolledtext
+from tkinter import ttk, scrolledtext, messagebox
 from threading import Thread
 from sim_time_rate_adjuster_procmem import main, backend_state, state_lock, VERSION
 
@@ -62,7 +66,7 @@ class SimAdjusterUI:
         self.restore_window_position()
 
         # --- Start Backend Thread ---
-        self.backend_thread = Thread(target=main, daemon=True)
+        self.backend_thread = Thread(target=lambda: main(True), daemon=True)
         self.backend_thread.start()
 
         # --- Start UI Update Loop ---
@@ -91,11 +95,19 @@ class SimAdjusterUI:
             self.console_text.see(tk.END)
         self.console_text.config(state='disabled')
 
+    has_shown_thread_died_error = False
+
     def update_ui(self):
+        if not self.backend_thread.is_alive() and not self.has_shown_thread_died_error:
+            # Backend thread has exited, a fatal error must have happened
+            # Bring up a dialog to inform the user, and exit
+            tk.messagebox.showerror("Sim Time Rate Adjuster for MSFS 2024", "The backend process has exited unexpectedly. Please check the logs for more information.\n\nYou will need to restart the application if you wish to continue.")
+            self.has_shown_thread_died_error = True
+        
         with state_lock:
             self.connection_status_label.config(
                 text=f"Connection Status: {backend_state['connection_status']}",
-                foreground="green" if backend_state['connection_status'] == "Connected" else "red"
+                foreground="green" if backend_state['connection_status'] == "Connected" else ("orange" if "Scanning" in backend_state['connection_status'] else "red")
             )
             self.simconnect_status_label.config(text=f"SimConnect Status: {backend_state['simconnect_status']}" if backend_state['connection_status'] == "Connected" else "SimConnect Status: Please wait...")
             self.sim_rate_label.config(text=f"Simulation Rate: {backend_state['simulation_rate']}" if backend_state['connection_status'] == "Connected" else "")
@@ -132,10 +144,17 @@ class SimAdjusterUI:
             pass
             
     def on_exit(self):
-            self.save_window_position()
-            self.root.destroy()
+        self.save_window_position()
+        self.root.destroy()
             
-if __name__ == "__main__":
+if __name__ == "__main__":    
+    # if the app is already running, bail early
+    mutex = win32event.CreateMutex(None, False, "SimTimeRateAdjusterMutex")
+    ERROR_ALREADY_EXISTS = 183  # Not defined in pywin32.
+    if win32api.GetLastError() == ERROR_ALREADY_EXISTS:
+        tk.messagebox.showinfo("Sim Time Rate Adjuster for MSFS 2024", "The application is already running.")
+        sys.exit(-1)
+        
     root = tk.Tk()
     app = SimAdjusterUI(root)
     root.mainloop()
