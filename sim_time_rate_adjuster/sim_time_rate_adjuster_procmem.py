@@ -11,7 +11,7 @@ from time import sleep, time
 import pymem
 from SimConnect import SimConnect, AircraftRequests, AircraftEvents
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 
 # Shared State Object
 backend_state = {
@@ -247,10 +247,14 @@ def main(invoked_from_ui):
                                 clock_minutes_inc_event(1)
                                 sleep(SLEEP_TIME_AFTER_SIMCONNECT_EVENT)
                                 if pm.read_float(address) != -60:
+                                    clock_minutes_dec_event(1)
+                                    sleep(SLEEP_TIME_AFTER_SIMCONNECT_EVENT)
                                     continue
                                 clock_minutes_inc_event(1)
                                 sleep(SLEEP_TIME_AFTER_SIMCONNECT_EVENT)
                                 if pm.read_float(address) != 0:
+                                    clock_minutes_dec_event(2)
+                                    sleep(SLEEP_TIME_AFTER_SIMCONNECT_EVENT)
                                     continue
                                 seconds_offset_address = address
                                 log(f"Seconds offset address: 0x{seconds_offset_address:X}")
