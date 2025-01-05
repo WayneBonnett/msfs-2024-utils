@@ -3,7 +3,7 @@
 # the "content" field, which is going to be the airport's ICAO code.
 # Then, look for any subfolder in the root streamed packages folder that contiains that ICAO code in its name.
 # Make sure that a subfolder with the same name exists in the root community folder. Report if there is or not.
-version = '0.5'
+version = '0.5.1'
 
 import argparse
 import datetime
@@ -65,7 +65,15 @@ def find_airport_in_streamed_packages_folder(root_folder, airport):
     return None
 
 def get_content_xml_path(root_streamed_packages_folder):
-    return os.path.abspath(os.path.join(root_streamed_packages_folder, '..', '..', 'LocalCache', 'Content.xml'))
+    paths_to_try = [
+        os.path.abspath(os.path.join(root_streamed_packages_folder, '..', '..', 'LocalCache', 'Content.xml')),
+        os.path.abspath(os.path.join(root_streamed_packages_folder, '..', 'Content.xml')),
+    ]
+    for path in paths_to_try:
+        if os.path.exists(path):
+            return path
+    return None
+        
 
 # For any airports in the community folder that does have a streamed package equivalent, make sure the streamed
 # package folder also exists in the community folder.
@@ -78,20 +86,26 @@ def check_airports_in_streamed_packages_folder(root_community_folder, root_strea
     
     print("PROGRESS: Gathering activated packages from Content.xml...")
     content_xml_path = get_content_xml_path(root_streamed_packages_folder)
-    activated_packages = []
-    with open(content_xml_path, 'r') as f:
-        lines = f.readlines()
-        for line in lines:
-            if '<Package name=' in line and 'active="Activated"' in line:
-                package_name = line.split('"')[1]
-                if not package_name.startswith("commounity"):
-                    activated_packages.append(package_name)
+    if content_xml_path:
+        print(f"INFO: Using Content.xml at {content_xml_path.replace("\\\\?\\", "")}")
+    else:
+        print("WARNING: Could not find Content.xml in the streamed packages folder.")
+    activated_packages = None
+    if content_xml_path:
+        with open(content_xml_path, 'r') as f:
+            activated_packages = []
+            lines = f.readlines()
+            for line in lines:
+                if '<Package name=' in line and 'active="Activated"' in line:
+                    package_name = line.split('"')[1]
+                    if not package_name.startswith("commounity"):
+                        activated_packages.append(package_name)
     
     print(f"PROGRESS: Checking streamed package overrides in the community folder...")
     for airportICAO in airports.keys():
         streamed_package_folder = find_airport_in_streamed_packages_folder(root_streamed_packages_folder, airportICAO)
         if streamed_package_folder:
-            if not any(x for x in activated_packages if x.endswith(streamed_package_folder)):
+            if activated_packages is not None and not any(x for x in activated_packages if x.endswith(streamed_package_folder)):
                 if verbose:
                     print(f"INFO: Modded airport {airportICAO} has a streamed package ({streamed_package_folder}), but it is disabled.")
             elif not os.path.exists(os.path.join(root_community_folder, streamed_package_folder)):
