@@ -8,10 +8,11 @@ import sys
 import threading
 from time import sleep, time
 
+import psutil
 import pymem
 from SimConnect import SimConnect, AircraftRequests, AircraftEvents
 
-VERSION = "0.2.2"
+VERSION = "0.3"
 
 # Shared State Object
 backend_state = {
@@ -20,7 +21,9 @@ backend_state = {
     "simulation_rate": 1.0,
     "seconds_offset": 0,
     "logs": [],
-    "force_state_change": None
+    "force_state_change": None,
+    "autoapp_path": None,
+    "autoapp_enabled": False
 }
 state_lock = threading.Lock()
 
@@ -71,6 +74,22 @@ def verify_seconds_offset_address(seconds_offset_address, pm, aircraft_events):
     if new_seconds_offset != seconds_offset:
         return False
     return True
+
+def handle_autoapp(sim_rate, autoapp_path):
+    autoapp_exe_name = os.path.basename(autoapp_path)
+    autoapp_exe_name_lower = autoapp_exe_name.lower()
+    
+    def is_running():
+        return any(p.name().lower() == autoapp_exe_name_lower for p in psutil.process_iter())
+    
+    if sim_rate > 1.0:
+        if is_running() and os.system(f'taskkill /f /im "{autoapp_exe_name}"') == 0 and not is_running():
+            log(f"{autoapp_exe_name} killed.")
+    else:
+        if not is_running():
+            os.startfile(autoapp_path)
+            if is_running():
+                log(f"{autoapp_exe_name} started.")
 
 def main(invoked_from_ui):
     logging.basicConfig(level=logging.INFO)
@@ -294,8 +313,12 @@ def main(invoked_from_ui):
                 #log("=====================================")
                     
                 force_state_change = None
+                autoapp_enabled = False
+                autoapp_path = None
                 with state_lock:
                     force_state_change = backend_state["force_state_change"]
+                    autoapp_enabled = backend_state["autoapp_enabled"]
+                    autoapp_path = backend_state["autoapp_path"]
                 
                 if force_state_change is not None:
                     if force_state_change == "pause":
@@ -329,6 +352,10 @@ def main(invoked_from_ui):
                 if cur_sim_rate != last_sim_rate:
                     log(f"Current simulation rate: {cur_sim_rate}x{additional_state}")
                     update_state("simulation_rate", f"{cur_sim_rate}x{additional_state}")
+                    if cur_sim_rate != 0.0 and last_sim_rate != 0.0 and ((cur_sim_rate <= 1.0) == (last_sim_rate > 1.0)):
+                        if autoapp_enabled and autoapp_path is not None and os.path.exists(autoapp_path):
+                            threading.Thread(target=handle_autoapp, args=(cur_sim_rate, autoapp_path), daemon=True).start()
+                    
                 seconds_elapsed_this_time_adjusted_for_sim_rate = seconds_elapsed_this_time * cur_sim_rate
                 
                 seconds_elapsed += seconds_elapsed_this_time

@@ -6,9 +6,12 @@ import win32event
 import win32api
 import win32con
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox
+from tkinter import ttk, scrolledtext, messagebox, filedialog
 from threading import Thread
 from sim_time_rate_adjuster_procmem import main, backend_state, state_lock, VERSION
+        
+def sanitize_path(path):
+    return path.replace('/', '\\')
 
 class SimAdjusterUI:
     # config file under appdata
@@ -61,9 +64,25 @@ class SimAdjusterUI:
         self.auto_scroll_check.pack(anchor='w')
 
         self.console_visible = False
+        
+        # --- Menu Bar ---
+        self.menu_bar = tk.Menu(self.root)
+        self.root.config(menu=self.menu_bar)
+
+        file_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.menu_bar.add_cascade(label="File", menu=file_menu)
+        file_menu.add_command(label="Options", command=self.open_options_window)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self.root.quit)
+        
+        self.autoapp_path = ''
+        self.autoapp_path_entry = None
+        self.autoapp_enabled_var = tk.BooleanVar()
+        self.options_window = None
 
         # Restore window geometry from config file
         self.restore_window_position()
+        self.load_options()
 
         # --- Start Backend Thread ---
         self.backend_thread = Thread(target=lambda: main(True), daemon=True)
@@ -94,6 +113,103 @@ class SimAdjusterUI:
         if self.auto_scroll.get():
             self.console_text.see(tk.END)
         self.console_text.config(state='disabled')
+        
+    def open_options_window(self):
+        self.options_window = tk.Toplevel(self.root)
+        options_window = self.options_window
+        options_window.title("Options")
+        options_window.grab_set()
+        
+        notebook = ttk.Notebook(options_window)
+        notebook.pack(expand=True, fill='both', padx=10, pady=10)
+        
+        # autoapp Tab
+        autoapp_tab = ttk.Frame(notebook)
+        notebook.add(autoapp_tab, text="App Restarter")
+        
+        # Path to autoapp .exe
+        path_label = ttk.Label(autoapp_tab, text=".exe Path:")
+        path_label.grid(row=0, column=0, padx=10, pady=10, sticky='w')
+        
+        self.autoapp_path_entry = ttk.Entry(autoapp_tab, width=50)
+        self.autoapp_path_entry.grid(row=0, column=1, padx=10, pady=10)
+        self.autoapp_path_entry.insert(0, self.autoapp_path)
+        
+        find_button = ttk.Button(autoapp_tab, text="Find", command=self.find_autoapp_exe)
+        find_button.grid(row=0, column=2, padx=10, pady=10)
+        
+        # Auto Kill Checkbox
+        auto_kill_checkbox = ttk.Checkbutton(
+            autoapp_tab, 
+            text="Automatically kill selected application when Sim Rate is accelerated, and restart when it's at most 1x again",
+            variable=self.autoapp_enabled_var
+        )        
+        auto_kill_checkbox.grid(row=1, column=0, columnspan=3, padx=10, pady=10, sticky='w')
+                
+        # OK and Cancel buttons
+        button_frame = ttk.Frame(options_window)
+        button_frame.pack(side='bottom', pady=10)
+
+        ok_button = ttk.Button(button_frame, text="OK", command=self.on_options_ok)
+        ok_button.pack(side='left', padx=5)
+
+        cancel_button = ttk.Button(button_frame, text="Cancel", command=self.on_options_cancel)
+        cancel_button.pack(side='left', padx=5)
+
+    def find_autoapp_exe(self):
+        file_path = tk.filedialog.askopenfilename(
+            title="Select autoapp Executable",
+            filetypes=[("Executable files", "*.exe"), ("All files", "*.*")]
+        )
+        if file_path:
+            self.autoapp_path_entry.delete(0, tk.END)
+            self.autoapp_path_entry.insert(0, sanitize_path(file_path))
+            
+    def on_options_ok(self):
+        with state_lock:
+            self.autoapp_path = sanitize_path(self.autoapp_path_entry.get())
+            backend_state['autoapp_path'] = self.autoapp_path
+            backend_state['autoapp_enabled'] = self.autoapp_enabled_var.get()
+        self.save_options()
+        self.options_window.destroy()
+
+    def on_options_cancel(self):
+        self.options_window.destroy()
+
+    def save_options(self):
+        if os.path.exists(self.CONFIG_FILE):
+            with open(self.CONFIG_FILE, 'r', encoding="utf-8") as config_file:
+                try:
+                    config = json.load(config_file)
+                except json.JSONDecodeError:
+                    config = {}
+        else:
+            config = {}
+
+        config.update({
+            'autoapp_path': self.autoapp_path,
+            'autoapp_enabled': self.autoapp_enabled_var.get()
+        })
+
+        with open(self.CONFIG_FILE, 'w', encoding="utf-8") as config_file:
+            json.dump(config, config_file, indent=4)
+            
+    def load_options(self):
+        if os.path.exists(self.CONFIG_FILE):
+            with open(self.CONFIG_FILE, 'r', encoding="utf-8") as config_file:
+                try:
+                    config = json.load(config_file)
+                    autoapp_path = sanitize_path(config.get('autoapp_path', ''))
+                    autoapp_enabled = config.get('autoapp_enabled', False)
+                    
+                    self.autoapp_path = autoapp_path
+                    self.autoapp_enabled_var.set(autoapp_enabled)
+                    
+                    with state_lock:
+                        backend_state['autoapp_path'] = autoapp_path
+                        backend_state['autoapp_enabled'] = autoapp_enabled
+                except json.JSONDecodeError:
+                    pass
 
     has_shown_thread_died_error = False
 
@@ -123,13 +239,22 @@ class SimAdjusterUI:
         self.root.after(1000, self.update_ui)  # Update every 1 second
 
     def save_window_position(self):
-        config = {
+        config = {}
+        if os.path.exists(self.CONFIG_FILE):
+            with open(self.CONFIG_FILE, "r", encoding="utf-8") as f:
+                try:
+                    config = json.load(f)
+                except json.JSONDecodeError:
+                    config = {}
+
+        config.update({
             "geometry": "+" + str.split(self.root.geometry(), "+", maxsplit=1)[1],
             "console_visible": self.console_visible,
             "auto_scroll": self.auto_scroll.get()
-        }
+        })
+
         with open(self.CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(config, f)
+            json.dump(config, f, indent=4)
 
     def restore_window_position(self):
         try:
