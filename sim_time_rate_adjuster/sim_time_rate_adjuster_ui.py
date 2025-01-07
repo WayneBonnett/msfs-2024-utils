@@ -7,7 +7,7 @@ from tkinter import ttk, scrolledtext, messagebox, filedialog
 from threading import Thread
 
 import humanize
-from sim_time_rate_adjuster_procmem import main, backend_state, state_lock, VERSION
+from sim_time_rate_adjuster_procmem import main, backend_state, state_lock
 import win32event
 import win32api
 
