@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import struct
+import subprocess
 import sys
 import threading
 from time import sleep, time
@@ -12,7 +13,7 @@ import psutil
 import pymem
 from SimConnect import SimConnect, AircraftRequests, AircraftEvents
 
-VERSION = "0.3"
+VERSION = "0.3.1"
 
 # Shared State Object
 backend_state = {
@@ -83,8 +84,8 @@ def handle_autoapp(sim_rate, autoapp_path):
         return any(p.name().lower() == autoapp_exe_name_lower for p in psutil.process_iter())
     
     if sim_rate > 1.0:
-        if is_running() and os.system(f'taskkill /f /im "{autoapp_exe_name}"') == 0 and not is_running():
-            log(f"{autoapp_exe_name} killed.")
+        if is_running() and subprocess.run(f'taskkill /f /im "{autoapp_exe_name}"', check=False, creationflags=subprocess.CREATE_NO_WINDOW).returncode == 0 and not is_running():
+                log(f"{autoapp_exe_name} killed.")
     else:
         if not is_running():
             os.startfile(autoapp_path)
