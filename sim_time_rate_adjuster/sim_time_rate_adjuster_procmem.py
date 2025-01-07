@@ -14,7 +14,7 @@ import psutil
 import pymem
 from SimConnect import SimConnect, AircraftRequests, AircraftEvents
 
-VERSION = "0.3.1.1"
+import constants
 
 # Shared State Object
 backend_state = {
@@ -39,7 +39,7 @@ def log(message=""):
     print(message)  # Keep console logging as well
 
 log("=====================================")
-log(f"MSFS2024 Sim Time Rate Adjuster v{VERSION}")
+log(f"MSFS2024 Sim Time Rate Adjuster v{constants.VERSION}")
 log("=====================================")
 
 # Hardcoded offset that stores the seconds offset from the real world time.

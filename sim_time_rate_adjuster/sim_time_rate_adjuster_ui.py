@@ -2,13 +2,16 @@ import datetime
 import json
 import os
 import sys
-import win32event
-import win32api
-import win32con
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox, filedialog
 from threading import Thread
+
+import humanize
 from sim_time_rate_adjuster_procmem import main, backend_state, state_lock, VERSION
+import win32event
+import win32api
+
+import constants
         
 def sanitize_path(path):
     return path.replace('/', '\\')
@@ -20,7 +23,7 @@ class SimAdjusterUI:
     
     def __init__(self, root):
         self.root = root
-        self.root.title(f"Sim Time Rate Adjuster v{VERSION}")
+        self.root.title(f"Sim Time Rate Adjuster v{constants.VERSION}")
         
         # --- Connection Status ---
         self.connection_status_label = ttk.Label(root, text="Connection Status: Disconnected", foreground="red")
@@ -225,11 +228,18 @@ class SimAdjusterUI:
                 text=f"Connection Status: {backend_state['connection_status']}",
                 foreground="green" if backend_state['connection_status'] == "Connected" else ("orange" if "Scanning" in backend_state['connection_status'] else "red")
             )
+            
             self.simconnect_status_label.config(text=f"SimConnect Status: {backend_state['simconnect_status']}" if backend_state['connection_status'] == "Connected" else "SimConnect Status: Please wait...")
+            
             self.sim_rate_label.config(text=f"Simulation Rate: {backend_state['simulation_rate']}" if backend_state['connection_status'] == "Connected" else "")
+            
             system_time = datetime.datetime.now(datetime.timezone.utc)
             self.system_time_label.config(text=f"System Time (UTC): {system_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            self.seconds_offset_label.config(text=f"Seconds Offset: {backend_state['seconds_offset']} sec" if backend_state['connection_status'] == "Connected" else "")
+            
+            seconds_offset_prefix = '- ' if backend_state['seconds_offset'] < 0 else ''
+            seconds_offset_text = f"{seconds_offset_prefix}{humanize.precisedelta(backend_state['seconds_offset'])}"
+            self.seconds_offset_label.config(text=f"In-Sim Time Offset: {seconds_offset_text}" if backend_state['connection_status'] == "Connected" else "")
+            
             system_time_with_offset = system_time + datetime.timedelta(seconds=backend_state['seconds_offset'])
             self.in_sim_time_label.config(text=f"In-Sim Time: {system_time_with_offset.strftime('%Y-%m-%d %H:%M:%S')}" if backend_state['connection_status'] == "Connected" else "")
             
