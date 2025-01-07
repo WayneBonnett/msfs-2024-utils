@@ -1,5 +1,6 @@
 ''' A script that watches for changes in the simulation rate, and adjusts the simulation time accordingly. '''
 
+import ctypes
 import logging
 import os
 import re
@@ -13,7 +14,7 @@ import psutil
 import pymem
 from SimConnect import SimConnect, AircraftRequests, AircraftEvents
 
-VERSION = "0.3.1"
+VERSION = "0.3.1.1"
 
 # Shared State Object
 backend_state = {
@@ -84,13 +85,26 @@ def handle_autoapp(sim_rate, autoapp_path):
         return any(p.name().lower() == autoapp_exe_name_lower for p in psutil.process_iter())
     
     if sim_rate > 1.0:
-        if is_running() and subprocess.run(f'taskkill /f /im "{autoapp_exe_name}"', check=False, creationflags=subprocess.CREATE_NO_WINDOW).returncode == 0 and not is_running():
+        if is_running():
+            returncode = subprocess.run(f'taskkill /f /im "{autoapp_exe_name}"', check=False, creationflags=subprocess.CREATE_NO_WINDOW).returncode
+            if returncode == 0 and not is_running():
                 log(f"{autoapp_exe_name} killed.")
     else:
         if not is_running():
-            os.startfile(autoapp_path)
+            dll_directory = None
+            if hasattr(sys, 'frozen'):
+                # If our app is 'frozen', we need to make sure the subprocess doesn't reuse our DLLs.
+                # Otherwise, if we terminate before it, the DLLs will still be in use, and the temporary directory that
+                # contains them will not be able to be automatically cleaned up.
+                BUFFER_SIZE = 8192
+                dll_directory = ctypes.create_string_buffer(BUFFER_SIZE)
+                ctypes.windll.kernel32.GetDllDirectoryW(BUFFER_SIZE, dll_directory)
+                ctypes.windll.kernel32.SetDllDirectoryW(None)
+            subprocess.Popen(f'"{autoapp_path}"', cwd=os.path.dirname(autoapp_path), creationflags=subprocess.DETACHED_PROCESS)
             if is_running():
                 log(f"{autoapp_exe_name} started.")
+            if dll_directory:
+                ctypes.windll.kernel32.SetDllDirectoryW(dll_directory)
 
 def main(invoked_from_ui):
     logging.basicConfig(level=logging.INFO)
@@ -305,7 +319,7 @@ def main(invoked_from_ui):
         seconds_elapsed = 0.0
         seconds_elapsed_adjusted_for_sim_rate = 0.0
         last_irl_time = time()
-        cur_sim_rate = 1.0
+        cur_sim_rate = None
         diff = 0.0
 
         try:
@@ -353,7 +367,9 @@ def main(invoked_from_ui):
                 if cur_sim_rate != last_sim_rate:
                     log(f"Current simulation rate: {cur_sim_rate}x{additional_state}")
                     update_state("simulation_rate", f"{cur_sim_rate}x{additional_state}")
-                    if cur_sim_rate != 0.0 and last_sim_rate != 0.0 and ((cur_sim_rate <= 1.0) == (last_sim_rate > 1.0)):
+                    first_loop = last_sim_rate is None
+                    acceleration_switched = not first_loop and cur_sim_rate != 0.0 and last_sim_rate != 0.0 and ((cur_sim_rate <= 1.0) == (last_sim_rate > 1.0))
+                    if first_loop or acceleration_switched:
                         if autoapp_enabled and autoapp_path is not None and os.path.exists(autoapp_path):
                             threading.Thread(target=handle_autoapp, args=(cur_sim_rate, autoapp_path), daemon=True).start()
                     
