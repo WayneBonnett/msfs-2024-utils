@@ -1,3 +1,5 @@
+''' This file contains the UI code for the Sim Time Rate Adjuster for MSFS 2024. '''
+
 import datetime
 import json
 import os
@@ -12,7 +14,9 @@ import win32event
 import win32api
 
 import constants
-        
+
+#pylint: disable=line-too-long,missing-function-docstring,missing-class-docstring
+
 def sanitize_path(path):
     return path.replace('/', '\\')
 
@@ -20,46 +24,46 @@ class SimAdjusterUI:
     # config file under appdata
     CONFIG_FILE = "config.json"
     DEFAULT_GEOMETRY = "+0+0"
-    
-    def __init__(self, root):
-        self.root = root
+
+    def __init__(self, main_window):
+        self.root = main_window
         self.root.title(f"Sim Time Rate Adjuster v{constants.VERSION}")
-        
+
         # --- Connection Status ---
-        self.connection_status_label = ttk.Label(root, text="Connection Status: Disconnected", foreground="red")
+        self.connection_status_label = ttk.Label(main_window, text="Connection Status: Disconnected", foreground="red")
         self.connection_status_label.grid(row=0, column=0, sticky="w", padx=10, pady=5)
-        
+
         # --- SimConnect Status ---
-        self.simconnect_status_label = ttk.Label(root, text="SimConnect Status: N/A")
+        self.simconnect_status_label = ttk.Label(main_window, text="SimConnect Status: N/A")
         self.simconnect_status_label.grid(row=1, column=0, sticky="w", padx=10, pady=5)
 
         # --- Time Labels ---
-        self.system_time_label = ttk.Label(root, text="System Time: N/A")
+        self.system_time_label = ttk.Label(main_window, text="System Time: N/A")
         self.system_time_label.grid(row=2, column=0, sticky="w", padx=10, pady=5)
-                
-        self.in_sim_time_label = ttk.Label(root, text="In-Sim Time: N/A")
+
+        self.in_sim_time_label = ttk.Label(main_window, text="In-Sim Time: N/A")
         self.in_sim_time_label.grid(row=3, column=0, sticky="w", padx=10, pady=5)
-        
+
         # --- Simulation Rate ---
-        self.sim_rate_label = ttk.Label(root, text="Simulation Rate: N/A")
+        self.sim_rate_label = ttk.Label(main_window, text="Simulation Rate: N/A")
         self.sim_rate_label.grid(row=4, column=0, sticky="w", padx=10, pady=5)
 
         # --- Seconds Offset ---
-        self.seconds_offset_label = ttk.Label(root, text="Seconds Offset: N/A")
+        self.seconds_offset_label = ttk.Label(main_window, text="Seconds Offset: N/A")
         self.seconds_offset_label.grid(row=5, column=0, sticky="w", padx=10, pady=5)
 
         # --- Expandable Output Console ---
-        self.expand_button = ttk.Button(root, text="Expand Console", command=self.toggle_console)
+        self.expand_button = ttk.Button(main_window, text="Expand Console", command=self.toggle_console)
         self.expand_button.grid(row=6, column=0, sticky="w", padx=10, pady=5)
-        
+
         # -- Force Pause / Resume Buttons --
-        self.force_pause_button = ttk.Button(root, text="Force Pause", command=lambda: self.force_state_change("pause"))
+        self.force_pause_button = ttk.Button(main_window, text="Force Pause", command=lambda: self.force_state_change("pause"))
         self.force_pause_button.grid(row=6, column=1, sticky="w", padx=10, pady=5)
-        
-        self.force_resume_button = ttk.Button(root, text="Force Resume", command=lambda: self.force_state_change("resume"))
+
+        self.force_resume_button = ttk.Button(main_window, text="Force Resume", command=lambda: self.force_state_change("resume"))
         self.force_resume_button.grid(row=6, column=2, sticky="w", padx=10, pady=5)
 
-        self.console_frame = ttk.Frame(root)
+        self.console_frame = ttk.Frame(main_window)
         self.console_text = scrolledtext.ScrolledText(self.console_frame, wrap=tk.WORD, height=10, state='disabled')
         self.console_text.pack(fill=tk.BOTH, expand=True)
         self.auto_scroll = tk.BooleanVar(value=True)
@@ -67,7 +71,7 @@ class SimAdjusterUI:
         self.auto_scroll_check.pack(anchor='w')
 
         self.console_visible = False
-        
+
         # --- Menu Bar ---
         self.menu_bar = tk.Menu(self.root)
         self.root.config(menu=self.menu_bar)
@@ -77,7 +81,7 @@ class SimAdjusterUI:
         file_menu.add_command(label="Options", command=self.open_options_window)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.root.quit)
-        
+
         self.autoapp_path = ''
         self.autoapp_path_entry = None
         self.autoapp_enabled_var = tk.BooleanVar()
@@ -96,7 +100,7 @@ class SimAdjusterUI:
 
         # --- Save window position on exit ----
         self.root.protocol("WM_DELETE_WINDOW", self.on_exit)
-        
+
     def force_state_change(self, state):
         with state_lock:
             backend_state['force_state_change'] = state
@@ -116,39 +120,39 @@ class SimAdjusterUI:
         if self.auto_scroll.get():
             self.console_text.see(tk.END)
         self.console_text.config(state='disabled')
-        
+
     def open_options_window(self):
         self.options_window = tk.Toplevel(self.root)
         options_window = self.options_window
         options_window.title("Options")
         options_window.grab_set()
-        
+
         notebook = ttk.Notebook(options_window)
         notebook.pack(expand=True, fill='both', padx=10, pady=10)
-        
+
         # autoapp Tab
         autoapp_tab = ttk.Frame(notebook)
         notebook.add(autoapp_tab, text="App Restarter")
-        
+
         # Path to autoapp .exe
         path_label = ttk.Label(autoapp_tab, text=".exe Path:")
         path_label.grid(row=0, column=0, padx=10, pady=10, sticky='w')
-        
+
         self.autoapp_path_entry = ttk.Entry(autoapp_tab, width=50)
         self.autoapp_path_entry.grid(row=0, column=1, padx=10, pady=10)
         self.autoapp_path_entry.insert(0, self.autoapp_path)
-        
+
         find_button = ttk.Button(autoapp_tab, text="Find", command=self.find_autoapp_exe)
         find_button.grid(row=0, column=2, padx=10, pady=10)
-        
+
         # Auto Kill Checkbox
         auto_kill_checkbox = ttk.Checkbutton(
-            autoapp_tab, 
+            autoapp_tab,
             text="Automatically kill selected application when Sim Rate is accelerated, and restart when it's at most 1x again",
             variable=self.autoapp_enabled_var
-        )        
+        )
         auto_kill_checkbox.grid(row=1, column=0, columnspan=3, padx=10, pady=10, sticky='w')
-                
+
         # OK and Cancel buttons
         button_frame = ttk.Frame(options_window)
         button_frame.pack(side='bottom', pady=10)
@@ -160,14 +164,14 @@ class SimAdjusterUI:
         cancel_button.pack(side='left', padx=5)
 
     def find_autoapp_exe(self):
-        file_path = tk.filedialog.askopenfilename(
+        file_path = filedialog.askopenfilename(
             title="Select autoapp Executable",
             filetypes=[("Executable files", "*.exe"), ("All files", "*.*")]
         )
         if file_path:
             self.autoapp_path_entry.delete(0, tk.END)
             self.autoapp_path_entry.insert(0, sanitize_path(file_path))
-            
+
     def on_options_ok(self):
         with state_lock:
             self.autoapp_path = sanitize_path(self.autoapp_path_entry.get())
@@ -196,7 +200,7 @@ class SimAdjusterUI:
 
         with open(self.CONFIG_FILE, 'w', encoding="utf-8") as config_file:
             json.dump(config, config_file, indent=4)
-            
+
     def load_options(self):
         if os.path.exists(self.CONFIG_FILE):
             with open(self.CONFIG_FILE, 'r', encoding="utf-8") as config_file:
@@ -204,10 +208,10 @@ class SimAdjusterUI:
                     config = json.load(config_file)
                     autoapp_path = sanitize_path(config.get('autoapp_path', ''))
                     autoapp_enabled = config.get('autoapp_enabled', False)
-                    
+
                     self.autoapp_path = autoapp_path
                     self.autoapp_enabled_var.set(autoapp_enabled)
-                    
+
                     with state_lock:
                         backend_state['autoapp_path'] = autoapp_path
                         backend_state['autoapp_enabled'] = autoapp_enabled
@@ -220,29 +224,29 @@ class SimAdjusterUI:
         if not self.backend_thread.is_alive() and not self.has_shown_thread_died_error:
             # Backend thread has exited, a fatal error must have happened
             # Bring up a dialog to inform the user, and exit
-            tk.messagebox.showerror("Sim Time Rate Adjuster for MSFS 2024", "The backend process has exited unexpectedly. Please check the logs for more information.\n\nYou will need to restart the application if you wish to continue.")
+            messagebox.showerror("Sim Time Rate Adjuster for MSFS 2024", "The backend process has exited unexpectedly. Please check the logs for more information.\n\nYou will need to restart the application if you wish to continue.")
             self.has_shown_thread_died_error = True
-        
+
         with state_lock:
             self.connection_status_label.config(
                 text=f"Connection Status: {backend_state['connection_status']}",
                 foreground="green" if backend_state['connection_status'] == "Connected" else ("orange" if "Scanning" in backend_state['connection_status'] else "red")
             )
-            
+
             self.simconnect_status_label.config(text=f"SimConnect Status: {backend_state['simconnect_status']}" if backend_state['connection_status'] == "Connected" else "SimConnect Status: Please wait...")
-            
+
             self.sim_rate_label.config(text=f"Simulation Rate: {backend_state['simulation_rate']}" if backend_state['connection_status'] == "Connected" else "")
-            
+
             system_time = datetime.datetime.now(datetime.timezone.utc)
             self.system_time_label.config(text=f"System Time (UTC): {system_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            
+
             seconds_offset_prefix = '- ' if backend_state['seconds_offset'] < 0 else ''
             seconds_offset_text = f"{seconds_offset_prefix}{humanize.precisedelta(backend_state['seconds_offset'])}"
             self.seconds_offset_label.config(text=f"In-Sim Time Offset: {seconds_offset_text}" if backend_state['connection_status'] == "Connected" else "")
-            
+
             system_time_with_offset = system_time + datetime.timedelta(seconds=backend_state['seconds_offset'])
             self.in_sim_time_label.config(text=f"In-Sim Time: {system_time_with_offset.strftime('%Y-%m-%d %H:%M:%S')}" if backend_state['connection_status'] == "Connected" else "")
-            
+
             while backend_state['logs']:
                 self.log_to_console(backend_state['logs'].pop(0))
 
@@ -277,19 +281,19 @@ class SimAdjusterUI:
                 self.auto_scroll.set(config.get("auto_scroll", True))
         except (FileNotFoundError, json.JSONDecodeError):
             pass
-            
+
     def on_exit(self):
         self.save_window_position()
         self.root.destroy()
-            
-if __name__ == "__main__":    
+
+if __name__ == "__main__":
     # if the app is already running, bail early
-    mutex = win32event.CreateMutex(None, False, "SimTimeRateAdjusterMutex")
+    mutex = win32event.CreateMutex(None, False, "SimTimeRateAdjusterMutex") #type: ignore[arg-type]
     ERROR_ALREADY_EXISTS = 183  # Not defined in pywin32.
     if win32api.GetLastError() == ERROR_ALREADY_EXISTS:
-        tk.messagebox.showinfo("Sim Time Rate Adjuster for MSFS 2024", "The application is already running.")
+        messagebox.showinfo("Sim Time Rate Adjuster for MSFS 2024", "The application is already running.")
         sys.exit(-1)
-        
+
     root = tk.Tk()
-    app = SimAdjusterUI(root)
+    app = SimAdjusterUI(main_window=root)
     root.mainloop()

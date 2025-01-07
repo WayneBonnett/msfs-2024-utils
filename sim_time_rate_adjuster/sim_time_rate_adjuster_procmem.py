@@ -1,3 +1,5 @@
+#pylint: disable=line-too-long, missing-function-docstring
+
 ''' A script that watches for changes in the simulation rate, and adjusts the simulation time accordingly. '''
 
 import ctypes
@@ -11,7 +13,7 @@ import threading
 from time import sleep, time
 
 import psutil
-import pymem
+import pymem # type: ignore
 from SimConnect import SimConnect, AircraftRequests, AircraftEvents
 
 import constants
@@ -80,10 +82,10 @@ def verify_seconds_offset_address(seconds_offset_address, pm, aircraft_events):
 def handle_autoapp(sim_rate, autoapp_path):
     autoapp_exe_name = os.path.basename(autoapp_path)
     autoapp_exe_name_lower = autoapp_exe_name.lower()
-    
+
     def is_running():
         return any(p.name().lower() == autoapp_exe_name_lower for p in psutil.process_iter())
-    
+
     if sim_rate > 1.0:
         if is_running():
             returncode = subprocess.run(f'taskkill /f /im "{autoapp_exe_name}"', check=False, creationflags=subprocess.CREATE_NO_WINDOW).returncode
@@ -96,9 +98,9 @@ def handle_autoapp(sim_rate, autoapp_path):
                 # If our app is 'frozen', we need to make sure the subprocess doesn't reuse our DLLs.
                 # Otherwise, if we terminate before it, the DLLs will still be in use, and the temporary directory that
                 # contains them will not be able to be automatically cleaned up.
-                BUFFER_SIZE = 8192
-                dll_directory = ctypes.create_string_buffer(BUFFER_SIZE)
-                ctypes.windll.kernel32.GetDllDirectoryW(BUFFER_SIZE, dll_directory)
+                _BUFFER_SIZE = 8192 # pylint: disable=invalid-name
+                dll_directory = ctypes.create_string_buffer(_BUFFER_SIZE)
+                ctypes.windll.kernel32.GetDllDirectoryW(_BUFFER_SIZE, dll_directory)
                 ctypes.windll.kernel32.SetDllDirectoryW(None)
             subprocess.Popen(f'"{autoapp_path}"', cwd=os.path.dirname(autoapp_path), creationflags=subprocess.DETACHED_PROCESS)
             if is_running():
@@ -108,7 +110,7 @@ def handle_autoapp(sim_rate, autoapp_path):
 
 def main(invoked_from_ui):
     logging.basicConfig(level=logging.INFO)
-    
+
     while True:
         # Get the base module address for FlightSimulator2024.exe
         pm = None
@@ -129,7 +131,7 @@ def main(invoked_from_ui):
                 if not invoked_from_ui:
                     os.system("pause")
                     sys.exit(1)
-            except Exception as ex:
+            except Exception as ex: # pylint: disable=broad-except
                 log(f"An error occurred: {ex}")
             sleep(1)
 
@@ -167,7 +169,7 @@ def main(invoked_from_ui):
             log()
 
         update_state("connection_status", "Scanning...")
-        
+
         aircraft_events = AircraftEvents(simconnect)
 
         log(f"Base address: 0x{base_address:X}")
@@ -189,12 +191,12 @@ def main(invoked_from_ui):
                         found_addresses = pm.pattern_scan_all(re.escape(final_address.to_bytes(8, "little")), return_multiple=True)
                     except pymem.exception.WinAPIError:
                         continue
-                    
+
                     # This will return a list of addresses where the pattern was found
                     for address in found_addresses:
                         log(f"Found at: {address:X}")
                     log()
-                        
+
                     # Find the two instances that are 0x20 apart
                     for i in range(len(found_addresses) - 1):
                         if found_addresses[i + 1] - found_addresses[i] == POINTER_TO_WEATHER_STRUCT_SPACING:
@@ -232,12 +234,12 @@ def main(invoked_from_ui):
                         found_addresses = pm.pattern_scan_all(re.escape(final_address.to_bytes(8, "little")), return_multiple=True)
                     except pymem.exception.WinAPIError:
                         found_addresses = []
-                    
+
                     if found_addresses:
                         for address in found_addresses:
                             log(f"Found at: {address:X}")
                         log()
-                        
+
                     # Find the two instances that are 0x20 apart
                     for i in range(len(found_addresses) - 1):
                         if found_addresses[i + 1] - found_addresses[i] == POINTER_TO_WEATHER_STRUCT_SPACING:
@@ -253,7 +255,7 @@ def main(invoked_from_ui):
                             seconds_offset = pm.read_float(seconds_offset_address)
                             log(f"Current seconds offset: {int(seconds_offset)}")
                             break
-            
+
             if seconds_offset_address == 0x0:
                 log()
                 log("Could not find the seconds offset address using quick methods, attempting to detect offset via events.")
@@ -300,12 +302,12 @@ def main(invoked_from_ui):
                 else:
                     clock_minutes_inc_event(1)
                     sleep(SLEEP_TIME_AFTER_SIMCONNECT_EVENT)
-            
+
             if seconds_offset_address == 0x0:
                 log()
                 log("Could not find the seconds offset address. Retrying after 5 seconds...")
                 sleep(5)
-            
+
         log("=====================================")
         log("Initialization complete.")
         log("Monitoring for sim rate and pause state changes...")
@@ -326,7 +328,7 @@ def main(invoked_from_ui):
             while True:
                 sleep(REFRESH_INTERVAL)
                 #log("=====================================")
-                    
+
                 force_state_change = None
                 autoapp_enabled = False
                 autoapp_path = None
@@ -334,7 +336,7 @@ def main(invoked_from_ui):
                     force_state_change = backend_state["force_state_change"]
                     autoapp_enabled = backend_state["autoapp_enabled"]
                     autoapp_path = backend_state["autoapp_path"]
-                
+
                 if force_state_change is not None:
                     if force_state_change == "pause":
                         log("Forcing pause...")
@@ -343,13 +345,13 @@ def main(invoked_from_ui):
                         log("Forcing resume...")
                         simconnect.paused = False
                     update_state("force_state_change", None)
-                    
+
                 new_time = time()
                 seconds_elapsed_this_time = new_time - last_irl_time
                 last_irl_time = new_time
-                
+
                 update_state("simconnect_status", f"OK: {simconnect.ok} - Paused: {simconnect.paused}")
-                
+
                 last_sim_rate = cur_sim_rate
                 additional_state = ""
                 if simconnect.paused:
@@ -372,12 +374,12 @@ def main(invoked_from_ui):
                     if first_loop or acceleration_switched:
                         if autoapp_enabled and autoapp_path is not None and os.path.exists(autoapp_path):
                             threading.Thread(target=handle_autoapp, args=(cur_sim_rate, autoapp_path), daemon=True).start()
-                    
+
                 seconds_elapsed_this_time_adjusted_for_sim_rate = seconds_elapsed_this_time * cur_sim_rate
-                
+
                 seconds_elapsed += seconds_elapsed_this_time
                 seconds_elapsed_adjusted_for_sim_rate += seconds_elapsed_this_time_adjusted_for_sim_rate
-                
+
                 diff += seconds_elapsed_this_time_adjusted_for_sim_rate - seconds_elapsed_this_time
                 if int(abs(diff)) >= 1:
                     diff_int = int(diff)
