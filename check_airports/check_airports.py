@@ -3,7 +3,7 @@
 # the "content" field, which is going to be the airport's ICAO code.
 # Then, look for any subfolder in the root streamed packages folder that contiains that ICAO code in its name.
 # Make sure that a subfolder with the same name exists in the root community folder. Report if there is or not.
-version = '0.5.1'
+version = '0.5.2'
 
 import argparse
 import datetime
@@ -38,22 +38,28 @@ def redirect_print(output_func=None):
     sys.stdout = PrintRedirector()
     sys.stderr = PrintRedirector()
 
-def find_airports_in_community_folder(root_folder, verbose):
+def find_airports_in_community_folder(community_root, verbose):
     airports = {}
-    for root, dirs, files in os_walk_long_path(root_folder):
-        if '-gsx-' in root.lower() or '-asobo-' in root.lower() or '-microsoft-' in root.lower() or 'navigraph-' in root.lower():
+    for addon_dirname in [x for x in os.listdir(community_root) if os.path.isdir(os.path.join(community_root, x))]:
+        if '-gsx-' in addon_dirname.lower() or '-asobo-' in addon_dirname.lower() or '-microsoft-' in addon_dirname.lower() or 'navigraph-' in addon_dirname.lower():
             continue
-        for file in files:
-            if file.lower() == 'contenthistory.json':
-                with open(os.path.join(root, file), 'r') as f:
-                    contentinfo = json.load(f)
-                    if 'items' in contentinfo:
-                        for item in contentinfo['items']:
-                            if 'type' in item and item['type'] == 'Airport':
-                                root_two_levels_up = os.path.dirname(os.path.dirname(root.replace("\\\\?\\", ""))).split('\\')[-1]
-                                airports[item['content']] = root_two_levels_up
-                                if verbose:
-                                    print(f"INFO: Found modded airport {item['content']} in {root_two_levels_up}")
+        addon_root = os.path.join(community_root, addon_dirname)
+        if os.path.exists(os.path.join(addon_root, 'ContentInfo')):
+            contentinfo_root = os.path.join(addon_root, 'ContentInfo')
+            contentinfo_dirs = [x for x in os.listdir(contentinfo_root) if os.path.isdir(os.path.join(contentinfo_root, x))]
+            for contentinfo_dir in contentinfo_dirs:
+                contentinfo_dir_root = os.path.join(contentinfo_root, contentinfo_dir)
+                contentinfo_dir_files = [x for x in os.listdir(contentinfo_dir_root) if os.path.isfile(os.path.join(contentinfo_dir_root, x))]
+                for file in contentinfo_dir_files:
+                    if file.lower() == 'contenthistory.json':
+                        with open(os.path.join(contentinfo_dir_root, file), 'r', encoding='utf8') as f:
+                            contentinfo = json.load(f)
+                            if 'items' in contentinfo:
+                                for item in contentinfo['items']:
+                                    if 'type' in item and item['type'] == 'Airport':
+                                        airports[item['content']] = addon_dirname
+                                        if verbose:
+                                            print(f"INFO: Found modded airport {item['content']} in {addon_dirname}")
     return airports
 
 def find_airport_in_streamed_packages_folder(root_folder, airport):
