@@ -116,11 +116,13 @@ def main(invoked_from_ui):
     while True:
         # Get the base module address for FlightSimulator2024.exe
         pm = None
+        process_path = None
         printed_waiting_to_start = False
         update_state("connection_status", "Waiting for FlightSimulator2024.exe to start...")
         while True:
             try:
                 pm = pymem.Pymem("FlightSimulator2024.exe")
+                process_path = pm.process_base.filename
                 break
             except pymem.exception.ProcessNotFound:
                 if not printed_waiting_to_start:
@@ -181,7 +183,12 @@ def main(invoked_from_ui):
 
         while seconds_offset_address == 0x0:
             if TRY_HARDCODED_OFFSETS_FIRST:
-                for offset in HARDCODED_OFFSETS:
+                # The first item in HARDCODED_OFFSETS is for the MS Store version, so if we can guess that the version of the game
+                # running is the Steam version, try the Steam offset first.
+                offsets_to_try = HARDCODED_OFFSETS.copy()
+                if process_path and 'limitless' not in process_path.lower():
+                    offsets_to_try = list(reversed(offsets_to_try))
+                for offset in offsets_to_try:
                     log()
                     log(f"Trying offset: 0x{offset:X}")
                     final_address = base_address + offset
