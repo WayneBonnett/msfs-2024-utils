@@ -273,7 +273,12 @@ class SimAdjusterUI:
             while backend_state['logs']:
                 self.log_to_console(backend_state['logs'].pop(0))
 
-        self.root.after(int(1000 / max(sim_rate, 1.0)), self.update_ui)
+        refresh_rate = 1.0
+        if sim_rate > 1.0:
+            refresh_rate = sim_rate
+        elif sim_rate < 1.0:
+            refresh_rate = 1.0 / sim_rate
+        self.root.after(int(1000 / refresh_rate), self.update_ui)
 
     def save_window_position(self):
         config = {}

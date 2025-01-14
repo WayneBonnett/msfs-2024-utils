@@ -392,19 +392,19 @@ def main(invoked_from_ui):
                 # How many seconds do we need to add to the in-sim time offset?
                 diff += seconds_elapsed_this_time_adjusted_for_sim_rate - seconds_elapsed_this_time
                                 
-                while int(diff) >= 1:
+                while int(abs(diff)) >= 1:
                     seconds_offset = pm.read_float(seconds_offset_address)
                     seconds_offset_f32 = float32(pm.read_float(seconds_offset_address))
                     diff_to_deplete = int(diff)
                     # Check if we can deplete the entire integer part of the diff in one go, accounting for single precision floating point math.
                     if (seconds_offset_f32 + diff_to_deplete).item() != (seconds_offset_f32.item() + diff_to_deplete):
                         # If not, find the minimum integer diff that can be depleted. We might need to run the outer loop multiple times to deplete the entire diff.
-                        diff_to_deplete = 1
+                        diff_to_deplete = 1 if diff > 0 else -1
                         while (seconds_offset_f32 + diff_to_deplete).item() != (seconds_offset_f32.item() + diff_to_deplete):
-                            diff_to_deplete += 1
+                            diff_to_deplete += 1 if diff > 0 else -1
                     
                     # Is the diff big enough relative to the minimum / desired amount ot deplete?
-                    if int(diff) >= int(diff_to_deplete):
+                    if int(abs(diff)) >= int(abs(diff_to_deplete)):
                         #prev_diff = diff
                         diff -= diff_to_deplete
                         new_seconds_offset_f32 = seconds_offset_f32 + diff_to_deplete
