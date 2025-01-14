@@ -1,3 +1,3 @@
 ''' Constants for the sim_time_rate_adjuster package. '''
 
-VERSION = "0.3.4"
+VERSION = "0.3.4.2"

@@ -382,9 +382,9 @@ def main(invoked_from_ui):
                         if sim_rate is not None:
                             cur_sim_rate = sim_rate
                 if cur_sim_rate != last_sim_rate:
-                    log(f"Current simulation rate: {cur_sim_rate}x{additional_state}")
                     update_state("simulation_rate", cur_sim_rate)
-                    cur_sim_rate_str = max(f'{cur_sim_rate:.0f}', str(cur_sim_rate), key=len)
+                    cur_sim_rate_str = f"{cur_sim_rate:.2f}".rstrip("0").rstrip(".")
+                    log(f"Current simulation rate: {cur_sim_rate_str}x{additional_state}")
                     update_state("simulation_rate_display_str", f"{cur_sim_rate_str}x{additional_state}")
                     first_loop = last_sim_rate is None
                     acceleration_switched = not first_loop and cur_sim_rate != 0.0 and last_sim_rate != 0.0 and ((cur_sim_rate <= 1.0) == (last_sim_rate > 1.0))
