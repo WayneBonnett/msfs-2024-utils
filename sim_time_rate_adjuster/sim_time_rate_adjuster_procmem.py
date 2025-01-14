@@ -348,6 +348,7 @@ def main(invoked_from_ui):
                         simconnect.paused = False
                     elif force_state_change == "reset":
                         log("Resetting to live time...")
+                        seconds_offset = 0.0
                         pm.write_float(seconds_offset_address, 0.0)
                         log("Setting new seconds offset: 0")
                         update_state("seconds_offset", 0)
