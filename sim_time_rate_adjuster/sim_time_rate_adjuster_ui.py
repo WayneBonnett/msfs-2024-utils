@@ -249,27 +249,31 @@ class SimAdjusterUI:
             messagebox.showerror("Sim Time Rate Adjuster for MSFS 2024", "The backend process has exited unexpectedly. Please check the logs for more information.\n\nYou will need to restart the application if you wish to continue.")
             self.has_shown_thread_died_error = True
 
-        with state_lock:            
+        sim_rate = 1.0
+        with state_lock:
             self.set_connection_status(backend_state['connection_status'])
+            
+            is_connected = backend_state['connection_status'] == "Connected"
 
-            self.simconnect_status_label.config(text=f"SimConnect Status: {backend_state['simconnect_status']}" if backend_state['connection_status'] == "Connected" else "SimConnect Status: Please wait...")
+            self.simconnect_status_label.config(text=f"SimConnect Status: {backend_state['simconnect_status']}" if is_connected else "SimConnect Status: Please wait...")
 
-            self.sim_rate_label.config(text=f"Simulation Rate: {backend_state['simulation_rate']}" if backend_state['connection_status'] == "Connected" else "")
+            sim_rate = backend_state['simulation_rate'] if is_connected else 1.0
+            self.sim_rate_label.config(text=f"Simulation Rate: {backend_state['simulation_rate_display_str']}" if is_connected else "")
 
             system_time = datetime.datetime.now(datetime.timezone.utc)
             self.system_time_label.config(text=f"System Time (UTC): {system_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
             seconds_offset_prefix = '- ' if backend_state['seconds_offset'] < 0 else ''
             seconds_offset_text = f"{seconds_offset_prefix}{humanize.precisedelta(backend_state['seconds_offset'])}"
-            self.seconds_offset_label.config(text=f"In-Sim Time Offset: {seconds_offset_text}" if backend_state['connection_status'] == "Connected" else "")
+            self.seconds_offset_label.config(text=f"In-Sim Time Offset: {seconds_offset_text}" if is_connected else "")
 
             system_time_with_offset = system_time + datetime.timedelta(seconds=backend_state['seconds_offset'])
-            self.in_sim_time_label.config(text=f"In-Sim Time: {system_time_with_offset.strftime('%Y-%m-%d %H:%M:%S')}" if backend_state['connection_status'] == "Connected" else "")
+            self.in_sim_time_label.config(text=f"In-Sim Time: {system_time_with_offset.strftime('%Y-%m-%d %H:%M:%S')}" if is_connected else "")
 
             while backend_state['logs']:
                 self.log_to_console(backend_state['logs'].pop(0))
 
-        self.root.after(1000, self.update_ui)  # Update every 1 second
+        self.root.after(int(1000 / max(sim_rate, 1.0)), self.update_ui)
 
     def save_window_position(self):
         config = {}
