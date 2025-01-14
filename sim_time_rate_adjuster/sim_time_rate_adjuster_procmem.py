@@ -344,6 +344,11 @@ def main(invoked_from_ui):
                     elif force_state_change == "resume":
                         log("Forcing resume...")
                         simconnect.paused = False
+                    elif force_state_change == "reset":
+                        log("Resetting to live time...")
+                        pm.write_float(seconds_offset_address, 0.0)
+                        log("Setting new seconds offset: 0")
+                        update_state("seconds_offset", 0)
                     update_state("force_state_change", None)
 
                 new_time = time()

@@ -52,16 +52,38 @@ class SimAdjusterUI:
         self.seconds_offset_label = ttk.Label(main_window, text="Seconds Offset: N/A")
         self.seconds_offset_label.grid(row=5, column=0, sticky="w", padx=10, pady=5)
 
+        button_frame = ttk.Frame(main_window)
+        button_frame.grid(row=6, column=0, columnspan=3, sticky="w", padx=10, pady=5)
+
         # --- Expandable Output Console ---
-        self.expand_button = ttk.Button(main_window, text="Expand Console", command=self.toggle_console)
-        self.expand_button.grid(row=6, column=0, sticky="w", padx=10, pady=5)
+        self.expand_button = ttk.Button(button_frame, text="Expand Console", command=self.toggle_console)
+        self.expand_button.grid(row=0, column=0, padx=5)
 
         # -- Force Pause / Resume Buttons --
-        self.force_pause_button = ttk.Button(main_window, text="Force Pause", command=lambda: self.force_state_change("pause"))
-        self.force_pause_button.grid(row=6, column=1, sticky="w", padx=10, pady=5)
+        self.force_pause_button = ttk.Button(
+            button_frame,
+            text="Force Pause",
+            command=lambda: self.force_state_change("pause"),
+            state='disabled'
+        )
+        self.force_pause_button.grid(row=0, column=1, padx=5)
 
-        self.force_resume_button = ttk.Button(main_window, text="Force Resume", command=lambda: self.force_state_change("resume"))
-        self.force_resume_button.grid(row=6, column=2, sticky="w", padx=10, pady=5)
+        self.force_resume_button = ttk.Button(
+            button_frame,
+            text="Force Resume",
+            command=lambda: self.force_state_change("resume"),
+            state='disabled'
+        )
+        self.force_resume_button.grid(row=0, column=2, padx=5)
+        
+        # -- Reset to Live Time Button --
+        self.reset_to_live_button = ttk.Button(
+            button_frame,
+            text="Reset to Live Time",
+            command=lambda: self.force_state_change("reset"),
+            state='disabled'
+        )
+        self.reset_to_live_button.grid(row=0, column=3, padx=5)
 
         self.console_frame = ttk.Frame(main_window)
         self.console_text = scrolledtext.ScrolledText(self.console_frame, wrap=tk.WORD, height=10, state='disabled')
@@ -227,11 +249,8 @@ class SimAdjusterUI:
             messagebox.showerror("Sim Time Rate Adjuster for MSFS 2024", "The backend process has exited unexpectedly. Please check the logs for more information.\n\nYou will need to restart the application if you wish to continue.")
             self.has_shown_thread_died_error = True
 
-        with state_lock:
-            self.connection_status_label.config(
-                text=f"Connection Status: {backend_state['connection_status']}",
-                foreground="green" if backend_state['connection_status'] == "Connected" else ("orange" if "Scanning" in backend_state['connection_status'] else "red")
-            )
+        with state_lock:            
+            self.set_connection_status(backend_state['connection_status'])
 
             self.simconnect_status_label.config(text=f"SimConnect Status: {backend_state['simconnect_status']}" if backend_state['connection_status'] == "Connected" else "SimConnect Status: Please wait...")
 
@@ -285,6 +304,20 @@ class SimAdjusterUI:
     def on_exit(self):
         self.save_window_position()
         self.root.destroy()
+
+    def update_button_states(self, connected):
+        state = 'normal' if connected else 'disabled'
+        self.force_pause_button.config(state=state)
+        self.force_resume_button.config(state=state)
+        self.reset_to_live_button.config(state=state)
+
+    def set_connection_status(self, status):
+        self.connection_status_label.config(
+                text=f"Connection Status: {backend_state['connection_status']}",
+                foreground="green" if backend_state['connection_status'] == "Connected" else ("orange" if "Scanning" in backend_state['connection_status'] else "red")
+            )
+        connected = status == "Connected"
+        self.update_button_states(connected)
 
 if __name__ == "__main__":
     # if the app is already running, bail early
