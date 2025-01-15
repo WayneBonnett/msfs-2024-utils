@@ -26,6 +26,7 @@ backend_state = {
     "simulation_rate": 1.0,
     "simulation_rate_display_str": "1.0x",
     "seconds_offset": 0,
+    "absolute_time": 0,
     "logs": [],
     "force_state_change": None,
     "autoapp_path": None,
@@ -321,11 +322,15 @@ def main(invoked_from_ui):
         log("Initialization complete.")
         log("Monitoring for sim rate and pause state changes...")
 
+        aircraft_requests = AircraftRequests(simconnect, _time=0)
+        
+        absolute_time = aircraft_requests.get("ABSOLUTE_TIME")
+        if absolute_time is not None:
+            update_state("absolute_time", absolute_time)
+        
         update_state("seconds_offset", int(seconds_offset))
         update_state("simconnect_status", f"OK: {simconnect.ok} - Paused: {simconnect.paused}")
         update_state("connection_status", "Connected")
-
-        aircraft_requests = AircraftRequests(simconnect, _time=0)
 
         seconds_elapsed = 0.0
         seconds_elapsed_adjusted_for_sim_rate = 0.0
@@ -367,6 +372,10 @@ def main(invoked_from_ui):
 
                 update_state("simconnect_status", f"OK: {simconnect.ok} - Paused: {simconnect.paused}")
 
+                absolute_time = aircraft_requests.get("ABSOLUTE_TIME")
+                if absolute_time is not None:
+                    update_state("absolute_time", absolute_time)
+
                 last_sim_rate = cur_sim_rate
                 additional_state = ""
                 if simconnect.paused:
@@ -399,8 +408,8 @@ def main(invoked_from_ui):
 
                 # How many seconds do we need to add to the in-sim time offset?
                 diff += seconds_elapsed_this_time_adjusted_for_sim_rate - seconds_elapsed_this_time
-                                
-                while int(abs(diff)) >= 1:
+                
+                while int(abs(diff)) >= 1:                                
                     seconds_offset = pm.read_float(seconds_offset_address)
                     seconds_offset_f32 = float32(pm.read_float(seconds_offset_address))
                     diff_to_deplete = int(diff)

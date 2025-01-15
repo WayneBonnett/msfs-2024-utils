@@ -268,7 +268,16 @@ class SimAdjusterUI:
             self.seconds_offset_label.config(text=f"In-Sim Time Offset: {seconds_offset_text}" if is_connected else "")
 
             system_time_with_offset = system_time + datetime.timedelta(seconds=backend_state['seconds_offset'])
-            self.in_sim_time_label.config(text=f"In-Sim Time: {system_time_with_offset.strftime('%Y-%m-%d %H:%M:%S')}" if is_connected else "")
+            absolute_time = backend_state['absolute_time']
+            # absolute_time is the number of seconds since midnight 1/1/1, so convert to a current datetime
+            absolute_time_datetime = datetime.datetime(1, 1, 1, tzinfo=datetime.timezone.utc) + datetime.timedelta(seconds=absolute_time)
+            in_sim_time_str = ""
+            if is_connected:
+                if abs((absolute_time_datetime - system_time_with_offset).total_seconds()) >= 2:
+                    in_sim_time_str = f"In-Sim Time: {system_time_with_offset.strftime('%Y-%m-%d %H:%M:%S')} (Estimated) / {absolute_time_datetime.strftime('%Y-%m-%d %H:%M:%S')} (Reported)"
+                else:
+                    in_sim_time_str = f"In-Sim Time: {system_time_with_offset.strftime('%Y-%m-%d %H:%M:%S')}"
+            self.in_sim_time_label.config(text=in_sim_time_str)
 
             while backend_state['logs']:
                 self.log_to_console(backend_state['logs'].pop(0))
