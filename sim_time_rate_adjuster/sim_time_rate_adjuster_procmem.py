@@ -409,8 +409,9 @@ def main(invoked_from_ui):
                 # How many seconds do we need to add to the in-sim time offset?
                 diff += seconds_elapsed_this_time_adjusted_for_sim_rate - seconds_elapsed_this_time
                 
+                seconds_offset = pm.read_float(seconds_offset_address)
+                
                 while int(abs(diff)) >= 1:                                
-                    seconds_offset = pm.read_float(seconds_offset_address)
                     seconds_offset_f32 = float32(pm.read_float(seconds_offset_address))
                     diff_to_deplete = int(diff)
                     # Check if we can deplete the entire integer part of the diff in one go, accounting for single precision floating point math.
