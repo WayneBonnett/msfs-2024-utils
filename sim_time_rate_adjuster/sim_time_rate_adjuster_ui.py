@@ -7,13 +7,15 @@ import sys
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox, filedialog
 from threading import Thread
+from typing import Optional
 
 import humanize
-from sim_time_rate_adjuster_procmem import main, backend_state, state_lock
+from tkcalendar import DateEntry  # type: ignore
 import win32event
 import win32api
 
 import constants
+from sim_time_rate_adjuster_procmem import main, backend_state, state_lock
 
 #pylint: disable=line-too-long,missing-function-docstring,missing-class-docstring
 
@@ -75,15 +77,15 @@ class SimAdjusterUI:
             state='disabled'
         )
         self.force_resume_button.grid(row=0, column=2, padx=5)
-        
-        # -- Reset to Live Time Button --
-        self.reset_to_live_button = ttk.Button(
+
+        # -- Reset Time Button --
+        self.reset_time_button = ttk.Button(
             button_frame,
-            text="Reset to Live Time",
-            command=lambda: self.force_state_change("reset"),
+            text="Reset Time...",
+            command=self.open_reset_window,
             state='disabled'
         )
-        self.reset_to_live_button.grid(row=0, column=3, padx=5)
+        self.reset_time_button.grid(row=0, column=3, padx=5)
 
         self.console_frame = ttk.Frame(main_window)
         self.console_text = scrolledtext.ScrolledText(self.console_frame, wrap=tk.WORD, height=10, state='disabled')
@@ -108,6 +110,7 @@ class SimAdjusterUI:
         self.autoapp_path_entry = None
         self.autoapp_enabled_var = tk.BooleanVar()
         self.options_window = None
+        self.reset_window = None
 
         # Restore window geometry from config file
         self.restore_window_position()
@@ -123,9 +126,16 @@ class SimAdjusterUI:
         # --- Save window position on exit ----
         self.root.protocol("WM_DELETE_WINDOW", self.on_exit)
 
-    def force_state_change(self, state):
+    def force_state_change(self, state, custom_time: Optional[datetime.datetime] = None):
         with state_lock:
             backend_state['force_state_change'] = state
+            if custom_time:
+                if state == "reset":
+                    backend_state['forced_seconds_offset'] = (custom_time - datetime.datetime.now(datetime.timezone.utc)).total_seconds()
+                else:
+                    self.log_to_console("ERROR: Custom time is only supported for reset operation.")
+            else:
+                backend_state['forced_seconds_offset'] = 0
 
     def toggle_console(self):
         if self.console_visible:
@@ -146,8 +156,12 @@ class SimAdjusterUI:
     def open_options_window(self):
         self.options_window = tk.Toplevel(self.root)
         options_window = self.options_window
+        options_window.withdraw()
         options_window.title("Options")
         options_window.grab_set()
+        saved_geometry = self.load_setting("options_window_geometry", None)
+        if saved_geometry:
+            options_window.geometry(saved_geometry)
 
         notebook = ttk.Notebook(options_window)
         notebook.pack(expand=True, fill='both', padx=10, pady=10)
@@ -185,6 +199,14 @@ class SimAdjusterUI:
         cancel_button = ttk.Button(button_frame, text="Cancel", command=self.on_options_cancel)
         cancel_button.pack(side='left', padx=5)
 
+        # If the user presses Enter, assume they want to click OK
+        options_window.bind("<Return>", lambda e: self.on_options_ok())
+
+        # on window close, save window position
+        options_window.protocol("WM_DELETE_WINDOW", self.on_options_cancel)
+
+        options_window.after(200, options_window.deiconify)
+
     def find_autoapp_exe(self):
         file_path = filedialog.askopenfilename(
             title="Select autoapp Executable",
@@ -194,34 +216,29 @@ class SimAdjusterUI:
             self.autoapp_path_entry.delete(0, tk.END)
             self.autoapp_path_entry.insert(0, sanitize_path(file_path))
 
+    def save_options_window_position(self):
+        self.update_config({
+            "options_window_geometry": "+" + str.split(self.options_window.geometry(), "+", maxsplit=1)[1]
+        })
+
     def on_options_ok(self):
         with state_lock:
             self.autoapp_path = sanitize_path(self.autoapp_path_entry.get())
             backend_state['autoapp_path'] = self.autoapp_path
             backend_state['autoapp_enabled'] = self.autoapp_enabled_var.get()
         self.save_options()
+        self.save_options_window_position()
         self.options_window.destroy()
 
     def on_options_cancel(self):
+        self.save_options_window_position()
         self.options_window.destroy()
 
     def save_options(self):
-        if os.path.exists(self.CONFIG_FILE):
-            with open(self.CONFIG_FILE, 'r', encoding="utf-8") as config_file:
-                try:
-                    config = json.load(config_file)
-                except json.JSONDecodeError:
-                    config = {}
-        else:
-            config = {}
-
-        config.update({
+        self.update_config({
             'autoapp_path': self.autoapp_path,
             'autoapp_enabled': self.autoapp_enabled_var.get()
         })
-
-        with open(self.CONFIG_FILE, 'w', encoding="utf-8") as config_file:
-            json.dump(config, config_file, indent=4)
 
     def load_options(self):
         if os.path.exists(self.CONFIG_FILE):
@@ -240,6 +257,16 @@ class SimAdjusterUI:
                 except json.JSONDecodeError:
                     pass
 
+    def load_setting(self, setting, default):
+        if os.path.exists(self.CONFIG_FILE):
+            with open(self.CONFIG_FILE, 'r', encoding="utf-8") as config_file:
+                try:
+                    config = json.load(config_file)
+                    return config.get(setting, default)
+                except json.JSONDecodeError:
+                    pass
+        return default
+
     has_shown_thread_died_error = False
 
     def update_ui(self):
@@ -252,7 +279,7 @@ class SimAdjusterUI:
         sim_rate = 1.0
         with state_lock:
             self.set_connection_status(backend_state['connection_status'])
-            
+
             is_connected = backend_state['connection_status'] == "Connected"
 
             self.simconnect_status_label.config(text=f"SimConnect Status: {backend_state['simconnect_status']}" if is_connected else "SimConnect Status: Please wait...")
@@ -290,23 +317,27 @@ class SimAdjusterUI:
                 refresh_rate = 1.0 / sim_rate
         self.root.after(int(1000 / refresh_rate), self.update_ui)
 
-    def save_window_position(self):
-        config = {}
+    def update_config(self, updates: dict):
         if os.path.exists(self.CONFIG_FILE):
             with open(self.CONFIG_FILE, "r", encoding="utf-8") as f:
                 try:
                     config = json.load(f)
                 except json.JSONDecodeError:
                     config = {}
+        else:
+            config = {}
 
-        config.update({
+        config.update(updates)
+
+        with open(self.CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=4)
+
+    def save_window_position(self):
+        self.update_config({
             "geometry": "+" + str.split(self.root.geometry(), "+", maxsplit=1)[1],
             "console_visible": self.console_visible,
             "auto_scroll": self.auto_scroll.get()
         })
-
-        with open(self.CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4)
 
     def restore_window_position(self):
         try:
@@ -328,7 +359,7 @@ class SimAdjusterUI:
         state = 'normal' if connected else 'disabled'
         self.force_pause_button.config(state=state)
         self.force_resume_button.config(state=state)
-        self.reset_to_live_button.config(state=state)
+        self.reset_time_button.config(state=state)
 
     def set_connection_status(self, status):
         self.connection_status_label.config(
@@ -337,6 +368,110 @@ class SimAdjusterUI:
             )
         connected = status == "Connected"
         self.update_button_states(connected)
+
+    def open_reset_window(self):
+        self.reset_window = tk.Toplevel(self.root)
+        reset_window = self.reset_window
+        reset_window.withdraw()
+        reset_window.title("Reset Time")
+        reset_window.grab_set()  # Make the window modal
+        saved_geometry = self.load_setting("reset_window_geometry", None)
+        if saved_geometry:
+            reset_window.geometry(saved_geometry)
+
+        datetime_frame = ttk.Frame(reset_window)
+
+        # Options: Live Time or Custom Time
+        option_var = tk.StringVar(value="live")
+
+        live_radio = ttk.Radiobutton(reset_window, text="Live Time", variable=option_var, value="live")
+        live_radio.grid(row=0, column=0, padx=10, pady=10, sticky='w')
+        # When clicked, disable the datetime picker
+        live_radio.bind("<Button-1>", lambda e: [child.config(state='disabled') for child in datetime_frame.winfo_children()])
+
+        custom_radio = ttk.Radiobutton(reset_window, text="Custom Time", variable=option_var, value="custom")
+        custom_radio.grid(row=1, column=0, padx=10, pady=5, sticky='w')
+        # When clicked, enable the datetime picker
+        custom_radio.bind("<Button-1>", lambda e: [child.config(state='normal') for child in datetime_frame.winfo_children()])
+
+        # Datetime picker (using tkcalendar)
+        datetime_frame.grid(row=2, column=0, padx=10, pady=5, sticky='w')
+
+        date_label = ttk.Label(datetime_frame, text="Select Date:")
+        date_label.grid(row=0, column=0, padx=(0,5), pady=5, sticky='w')
+
+        system_time_with_offset = None
+        with state_lock:
+            system_time_with_offset = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=backend_state['seconds_offset'])
+
+        date_entry = DateEntry(datetime_frame, width=12, background='darkblue',
+                               foreground='white', borderwidth=2)
+        date_entry.set_date(system_time_with_offset)
+        date_entry.grid(row=0, column=1, pady=5, sticky='w')
+
+        time_label = ttk.Label(datetime_frame, text="Select Time (HH:MM):")
+        time_label.grid(row=1, column=0, padx=(0,5), pady=5, sticky='w')
+
+        time_entry = ttk.Entry(datetime_frame)
+        time_entry.insert(0, system_time_with_offset.strftime("%H:%M"))
+        time_entry.grid(row=1, column=1, pady=5, sticky='w')
+
+        # Disable all elements in the grid by default
+        for child in datetime_frame.winfo_children():
+            child.config(state='disabled')
+
+        # OK and Cancel buttons
+        button_frame = ttk.Frame(reset_window)
+        button_frame.grid(row=3, column=0, padx=10, pady=10, sticky='e')
+
+        def close_window():
+            self.update_config({
+                "reset_window_geometry": "+" + str.split(reset_window.geometry(), "+", maxsplit=1)[1]
+            })
+            reset_window.destroy()
+
+        def on_ok():
+            if option_var.get() == "custom":
+                try:
+                    selected_date = date_entry.get_date()
+                    selected_time = time_entry.get()
+                    try:
+                        selected_datetime = datetime.datetime.combine(
+                            selected_date,
+                            datetime.datetime.strptime(selected_time, "%H:%M").time(),
+                            tzinfo=datetime.timezone.utc
+                        )
+                    except ValueError:
+                        selected_datetime = datetime.datetime.combine(
+                            selected_date,
+                            datetime.datetime.strptime(selected_time, "%H%M").time(),
+                            tzinfo=datetime.timezone.utc
+                        )
+                    # Perform reset with selected_datetime
+                    self.force_state_change("reset", selected_datetime)
+                    close_window()
+                except ValueError:
+                    messagebox.showerror("Invalid Input", "Please enter a valid time in HH:MM or HHMM formats.")
+            else:
+                self.force_state_change("reset")
+                close_window()
+
+        def on_cancel():
+            close_window()
+
+        ok_button = ttk.Button(button_frame, text="OK", command=on_ok)
+        ok_button.grid(row=0, column=0, padx=5)
+
+        cancel_button = ttk.Button(button_frame, text="Cancel", command=on_cancel)
+        cancel_button.grid(row=0, column=1, padx=5)
+
+        # If the user presses Enter, assume they want to click OK
+        reset_window.bind("<Return>", lambda e: on_ok())
+
+        # on window close, save window position
+        reset_window.protocol("WM_DELETE_WINDOW", close_window)
+
+        reset_window.after(200, reset_window.deiconify)
 
 if __name__ == "__main__":
     # if the app is already running, bail early

@@ -29,6 +29,7 @@ backend_state = {
     "absolute_time": 0,
     "logs": [],
     "force_state_change": None,
+    "forced_seconds_offset": 0,
     "autoapp_path": None,
     "autoapp_enabled": False
 }
@@ -323,11 +324,11 @@ def main(invoked_from_ui):
         log("Monitoring for sim rate and pause state changes...")
 
         aircraft_requests = AircraftRequests(simconnect, _time=0)
-        
+
         absolute_time = aircraft_requests.get("ABSOLUTE_TIME")
         if absolute_time is not None:
             update_state("absolute_time", absolute_time)
-        
+
         update_state("seconds_offset", int(seconds_offset))
         update_state("simconnect_status", f"OK: {simconnect.ok} - Paused: {simconnect.paused}")
         update_state("connection_status", "Connected")
@@ -346,10 +347,12 @@ def main(invoked_from_ui):
                 force_state_change = None
                 autoapp_enabled = False
                 autoapp_path = None
+                forced_seconds_offset = 0
                 with state_lock:
                     force_state_change = backend_state["force_state_change"]
                     autoapp_enabled = backend_state["autoapp_enabled"]
                     autoapp_path = backend_state["autoapp_path"]
+                    forced_seconds_offset = backend_state["forced_seconds_offset"]
 
                 if force_state_change is not None:
                     if force_state_change == "pause":
@@ -359,11 +362,11 @@ def main(invoked_from_ui):
                         log("Forcing resume...")
                         simconnect.paused = False
                     elif force_state_change == "reset":
-                        log("Resetting to live time...")
-                        seconds_offset = 0.0
-                        pm.write_float(seconds_offset_address, 0.0)
-                        log("Setting new seconds offset: 0")
-                        update_state("seconds_offset", 0)
+                        log("Resetting to custom seconds offset...")
+                        seconds_offset = forced_seconds_offset
+                        pm.write_float(seconds_offset_address, float(seconds_offset))
+                        log(f"Setting new seconds offset: {int(seconds_offset)}")
+                        update_state("seconds_offset", int(seconds_offset))
                     update_state("force_state_change", None)
 
                 new_time = time()
@@ -408,10 +411,10 @@ def main(invoked_from_ui):
 
                 # How many seconds do we need to add to the in-sim time offset?
                 diff += seconds_elapsed_this_time_adjusted_for_sim_rate - seconds_elapsed_this_time
-                
+
                 seconds_offset = pm.read_float(seconds_offset_address)
-                
-                while int(abs(diff)) >= 1:                                
+
+                while int(abs(diff)) >= 1:
                     seconds_offset_f32 = float32(pm.read_float(seconds_offset_address))
                     diff_to_deplete = int(diff)
                     # Check if we can deplete the entire integer part of the diff in one go, accounting for single precision floating point math.
@@ -420,7 +423,7 @@ def main(invoked_from_ui):
                         diff_to_deplete = 1 if diff > 0 else -1
                         while (seconds_offset_f32 + diff_to_deplete).item() != (seconds_offset_f32.item() + diff_to_deplete):
                             diff_to_deplete += 1 if diff > 0 else -1
-                    
+
                     # Is the diff big enough relative to the minimum / desired amount ot deplete?
                     if int(abs(diff)) >= int(abs(diff_to_deplete)):
                         #prev_diff = diff
@@ -435,7 +438,7 @@ def main(invoked_from_ui):
                     else:
                         # If it's not, then break out of the loop and accumulate some more diff
                         break
-                
+
                 update_state("seconds_offset", int(seconds_offset))
         except KeyboardInterrupt:
             log("Exiting...")
