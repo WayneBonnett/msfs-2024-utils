@@ -11,6 +11,7 @@ import json
 import os
 import shutil
 import sys
+from typing import List, Optional
 
 def os_walk_long_path(root_path):
     list = os.listdir(root_path)
@@ -72,6 +73,10 @@ def find_airport_in_streamed_packages_folder(root_folder, airport):
 
 def get_content_xml_path(root_streamed_packages_folder):
     paths_to_try = [
+        # Post-SU1
+        os.path.abspath(os.path.join(os.getenv('LOCALAPPDATA'), 'Packages', 'Microsoft.Limitless_8wekyb3d8bbwe', 'LocalCache', 'Content.xml')),
+        os.path.abspath(os.path.join(os.getenv('APPDATA'), 'Microsoft Flight Simulator 2024', 'Content.xml')),
+        # Pre-SU1
         os.path.abspath(os.path.join(root_streamed_packages_folder, '..', '..', 'LocalCache', 'Content.xml')),
         os.path.abspath(os.path.join(root_streamed_packages_folder, '..', 'Content.xml')),
     ]
@@ -144,18 +149,17 @@ def autodetect_community_folder():
                     break
     return root_community_folder
 
-def autodetect_streamed_packages_folder(config: str | None = None) -> str | None:
-    root_streamed_packages_folder = None
-    
-    do_only_su1 = config == "su1"
+def autodetect_streamed_packages_folder(versions: Optional[List[str]] = None) -> str:
+    root_streamed_packages_folder = ""
     
     # Post-SU1
     # Streamed Packages now live in the same parent directory as the Community folder
-    root_community_folder = autodetect_community_folder()
-    if root_community_folder:
-        root_streamed_packages_folder = os.path.abspath(os.path.join(root_community_folder, '..', 'StreamedPackages'))
+    if not versions or "su1" in versions:
+        root_community_folder = autodetect_community_folder()
+        if root_community_folder:
+            root_streamed_packages_folder = os.path.abspath(os.path.join(root_community_folder, '..', 'StreamedPackages'))
         
-    if not do_only_su1:
+    if not versions or "retail" in versions:
         # Pre-SU1
         # Try to automatically determine the streamed packages folder by looking for the MS Store location
         if not os.path.exists(root_streamed_packages_folder):
@@ -253,7 +257,7 @@ def main():
                             else:
                                 f.write(line)
         else:
-            print("INFO: All necessary streamed package overrides are present in the community folder.")
+            print("INFO: All necessary streamed package overrides are present in the Community folder, or the packages disabled in Content.xml.")
     if not args.noinput:
         print()
         # pause before exiting

@@ -31,10 +31,14 @@ class AirportCheckerUI:
         if not self.community_folder_var.get():
             self.community_folder_var.set(autodetect_community_folder() or "")
             
-        auto_streamed_folder = autodetect_streamed_packages_folder()
-        if auto_streamed_folder:
-            if not self.streamed_folder_var.get() or self.streamed_folder_var.get() != auto_streamed_folder:
-                self.streamed_folder_var.set(auto_streamed_folder)
+        if not self.streamed_folder_var.get():
+            # If we don't have a last used streamed folder, try to autodetect it
+            self.streamed_folder_var.set(autodetect_streamed_packages_folder() or "")
+        else:
+            # If we have a last used streamed folder, see if it needs to be upgraded for SU1
+            auto_streamed_folder_su1 = autodetect_streamed_packages_folder(["su1"])
+            if auto_streamed_folder_su1 and auto_streamed_folder_su1 != self.streamed_folder_var.get():
+                self.streamed_folder_var.set(auto_streamed_folder_su1)
         
         tk.Button(root, text="Browse", command=self.browse_streamed_folder).grid(row=1, column=2, padx=5, pady=5)
         
