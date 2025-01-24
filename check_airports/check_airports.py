@@ -3,7 +3,7 @@
 # the "content" field, which is going to be the airport's ICAO code.
 # Then, look for any subfolder in the root streamed packages folder that contiains that ICAO code in its name.
 # Make sure that a subfolder with the same name exists in the root community folder. Report if there is or not.
-version = '0.5.2'
+version = '0.5.3'
 
 import argparse
 import datetime
@@ -144,13 +144,26 @@ def autodetect_community_folder():
                     break
     return root_community_folder
 
-def autodetect_streamed_packages_folder():
+def autodetect_streamed_packages_folder(config: str | None = None) -> str | None:
     root_streamed_packages_folder = None
-    # try to automatically determine the streamed packages folder by looking for 
-    # '%localappdata%\Packages\Microsoft.Limitless_8wekyb3d8bbwe\LocalState\StreamedPackages'
-    root_streamed_packages_folder = os.path.join(os.getenv('LOCALAPPDATA'), 'Packages', 'Microsoft.Limitless_8wekyb3d8bbwe', 'LocalState', 'StreamedPackages')
-    if not os.path.exists(root_streamed_packages_folder):
-        root_streamed_packages_folder = os.path.join(os.getenv('APPDATA'), 'Microsoft Flight Simulator 2024', 'StreamedPackages')
+    
+    do_only_su1 = config == "su1"
+    
+    # Post-SU1
+    # Streamed Packages now live in the same parent directory as the Community folder
+    root_community_folder = autodetect_community_folder()
+    if root_community_folder:
+        root_streamed_packages_folder = os.path.abspath(os.path.join(root_community_folder, '..', 'StreamedPackages'))
+        
+    if not do_only_su1:
+        # Pre-SU1
+        # Try to automatically determine the streamed packages folder by looking for the MS Store location
+        if not os.path.exists(root_streamed_packages_folder):
+            root_streamed_packages_folder = os.path.join(os.getenv('LOCALAPPDATA'), 'Packages', 'Microsoft.Limitless_8wekyb3d8bbwe', 'LocalState', 'StreamedPackages')
+        # Try the Steam location, if we still haven't found it
+        if not os.path.exists(root_streamed_packages_folder):
+            root_streamed_packages_folder = os.path.join(os.getenv('APPDATA'), 'Microsoft Flight Simulator 2024', 'StreamedPackages')
+            
     return root_streamed_packages_folder
    
 def main():

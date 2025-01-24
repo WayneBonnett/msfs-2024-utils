@@ -30,8 +30,11 @@ class AirportCheckerUI:
         self.restore_last_used_paths()
         if not self.community_folder_var.get():
             self.community_folder_var.set(autodetect_community_folder() or "")
-        if not self.streamed_folder_var.get():
-            self.streamed_folder_var.set(autodetect_streamed_packages_folder() or "")
+            
+        auto_streamed_folder = autodetect_streamed_packages_folder()
+        if auto_streamed_folder:
+            if not self.streamed_folder_var.get() or self.streamed_folder_var.get() != auto_streamed_folder:
+                self.streamed_folder_var.set(auto_streamed_folder)
         
         tk.Button(root, text="Browse", command=self.browse_streamed_folder).grid(row=1, column=2, padx=5, pady=5)
         
