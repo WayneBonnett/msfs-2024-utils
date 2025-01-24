@@ -50,7 +50,13 @@ log("=====================================")
 
 # Hardcoded offset that stores the seconds offset from the real world time.
 # This is quite likely to break in future MSFS updates.
-HARDCODED_OFFSETS = [ 0x76f7728, 0x79670b8 ]
+HARDCODED_OFFSETS = [
+    ("MSStore_SU1", 0x74fd5f8),
+    ("MSStore_Retail", 0x76f7728),
+
+    ("Steam_SU1", 0x776ddf8),
+    ("Steam_Retail", 0x79670b8)
+]
 TRY_HARDCODED_OFFSETS_FIRST = True
 POINTER_TO_WEATHER_STRUCT_SPACING = 0x20
 SECONDS_OFFSET_VALUE_OFFSET_FROM_SECOND_POINTER = 0x34
@@ -185,12 +191,15 @@ def main(invoked_from_ui):
 
         while seconds_offset_address == 0x0:
             if TRY_HARDCODED_OFFSETS_FIRST:
-                # The first item in HARDCODED_OFFSETS is for the MS Store version, so if we can guess that the version of the game
-                # running is the Steam version, try the Steam offset first.
-                offsets_to_try = HARDCODED_OFFSETS.copy()
-                if process_path and 'limitless' not in process_path.lower():
-                    offsets_to_try = list(reversed(offsets_to_try))
-                for offset in offsets_to_try:
+                msfs_vendor = "MSStore"
+                if process_path and 'microsoft.limitless' not in process_path.lower():
+                    msfs_vendor = "Steam"
+                log(f"Detected MSFS Vendor: {msfs_vendor}")
+                for offset_tuple in HARDCODED_OFFSETS:
+                    if not offset_tuple[0].startswith(msfs_vendor):
+                        continue
+                    offset = offset_tuple[1]
+
                     log()
                     log(f"Trying offset: 0x{offset:X}")
                     final_address = base_address + offset
@@ -206,7 +215,8 @@ def main(invoked_from_ui):
                     # This will return a list of addresses where the pattern was found
                     for address in found_addresses:
                         log(f"Found at: {address:X}")
-                    log()
+                    if found_addresses:
+                        log()
 
                     # Find the two instances that are 0x20 apart
                     for i in range(len(found_addresses) - 1):
